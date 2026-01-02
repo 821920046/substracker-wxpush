@@ -1,17 +1,19 @@
 import { Config, Env } from '../types';
 import { generateRandomSecret } from './auth';
 
+export async function getRawConfig(env: Env): Promise<any> {
+  if (!env.SUBSCRIPTIONS_KV) {
+    console.error('[配置] KV存储未绑定');
+    return {};
+  }
+  const data = await env.SUBSCRIPTIONS_KV.get('config');
+  return data ? JSON.parse(data) : {};
+}
+
 export async function getConfig(env: Env): Promise<Config> {
   try {
-    if (!env.SUBSCRIPTIONS_KV) {
-      console.error('[配置] KV存储未绑定');
-      throw new Error('KV存储未绑定');
-    }
-
-    const data = await env.SUBSCRIPTIONS_KV.get('config');
-    console.log('[配置] 从KV读取配置:', data ? '成功' : '空配置');
-
-    const config = data ? JSON.parse(data) : {};
+    const config = await getRawConfig(env);
+    console.log('[配置] 从KV读取配置:', Object.keys(config).length > 0 ? '成功' : '空配置');
 
     // 确保JWT_SECRET的一致性
     let jwtSecret = config.JWT_SECRET;
@@ -20,8 +22,10 @@ export async function getConfig(env: Env): Promise<Config> {
       console.log('[配置] 生成新的JWT密钥');
 
       // 保存新的JWT密钥
-      const updatedConfig = { ...config, JWT_SECRET: jwtSecret };
-      await env.SUBSCRIPTIONS_KV.put('config', JSON.stringify(updatedConfig));
+      config.JWT_SECRET = jwtSecret;
+      if (env.SUBSCRIPTIONS_KV) {
+        await env.SUBSCRIPTIONS_KV.put('config', JSON.stringify(config));
+      }
     }
 
     const finalConfig: Config = {
@@ -75,7 +79,6 @@ export async function getConfig(env: Env): Promise<Config> {
       }
     };
 
-    console.log('[配置] 最终配置用户名:', finalConfig.adminUsername);
     return finalConfig;
   } catch (error) {
     console.error('[配置] 获取配置失败:', error);

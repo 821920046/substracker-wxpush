@@ -25,6 +25,7 @@ export const adminPage = `
     .toast.show { transform: translateX(0); }
     .toast.success { background-color: #10b981; }
     .toast.error { background-color: #ef4444; }
+    .toast.info { background-color: #3b82f6; }
     
     /* Calendar Styles */
     .calendar-popup {
@@ -67,13 +68,29 @@ export const adminPage = `
     .calendar-day:hover { background-color: #ebf4ff; }
     .calendar-day.today { background-color: #bee3f8; font-weight: bold; }
     .calendar-day.selected { background-color: #667eea; color: white; }
+    .calendar-day.selected .lunar-text { color: #e2e8f0; }
     .calendar-day.other-month { color: #cbd5e0; }
     .lunar-text {
       font-size: 0.6rem;
       color: #a0aec0;
       margin-top: -2px;
     }
-    .calendar-day.selected .lunar-text { color: #e2e8f0; }
+    /* Tooltip Styles */
+    .hover-container { position: relative; width: 100%; }
+    .hover-text { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; transition: all 0.3s ease; display: block; }
+    .hover-text:hover { color: #3b82f6; }
+    .hover-tooltip {
+      position: fixed; z-index: 9999; background: #1f2937; color: white; padding: 10px 14px;
+      border-radius: 8px; font-size: 0.875rem; max-width: 320px; word-wrap: break-word;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2); opacity: 0; visibility: hidden;
+      transition: all 0.3s ease; transform: translateY(-10px); white-space: normal; pointer-events: none; line-height: 1.4;
+    }
+    .hover-tooltip.show { opacity: 1; visibility: visible; transform: translateY(0); }
+    .hover-tooltip::before {
+      content: ''; position: absolute; top: -6px; left: 20px; border-left: 6px solid transparent;
+      border-right: 6px solid transparent; border-bottom: 6px solid #1f2937;
+    }
+    .hover-tooltip.tooltip-above::before { top: auto; bottom: -6px; border-bottom: none; border-top: 6px solid #1f2937; }
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen font-sans">
@@ -278,7 +295,7 @@ export const adminPage = `
             <label for="useLunar" class="ml-2 block text-sm text-gray-900">农历周期</label>
           </div>
            <div class="flex items-center">
-            <input type="checkbox" id="showLunar" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+            <input type="checkbox" id="showLunar" checked class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
             <label for="showLunar" class="ml-2 block text-sm text-gray-900">显示农历</label>
           </div>
           <button type="button" id="calculateExpiryBtn" class="ml-auto text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded hover:bg-indigo-200 transition">
@@ -379,55 +396,51 @@ export const adminPage = `
     };
     
     // Lunar Business Logic
-    function lunar2solar(lunar) {
-      let offset = 0;
-      for (let i = 1900; i < lunar.year; i++) offset += lunarCalendar.lunarYearDays(i);
-      for (let i = 1; i < lunar.month; i++) offset += lunarCalendar.monthDays(lunar.year, i);
-      if (lunar.isLeap) offset += lunarCalendar.monthDays(lunar.year, lunar.month); // If current month is leap, add previous normal month
-      // Note: Simplified logic, actual conversion is more complex. For now rely on approximation or libraries if needed.
-      // Actually, since we only need next period calculation, let's implement addLunarPeriod correctly.
-      
-      // Simple implementation: scan from 1900-01-31
-      let solarBase = Date.UTC(1900, 0, 31);
-      // Recalculate offset precisely
-      let days = 0;
-      for (let y = 1900; y < lunar.year; y++) days += lunarCalendar.lunarYearDays(y);
-      let leap = lunarCalendar.leapMonth(lunar.year);
-      for (let m = 1; m < lunar.month; m++) {
-        days += lunarCalendar.monthDays(lunar.year, m);
-        if (leap > 0 && m === leap) days += lunarCalendar.leapDays(lunar.year);
-      }
-      if (lunar.isLeap) days += lunarCalendar.monthDays(lunar.year, lunar.month); // Add the normal month days before the leap month
-      days += lunar.day - 1;
-      
-      let solarDate = new Date(solarBase + days * 86400000);
-      return { year: solarDate.getUTCFullYear(), month: solarDate.getUTCMonth() + 1, day: solarDate.getUTCDate() };
-    }
-    
-    function addLunarPeriod(lunar, value, unit) {
-      let { year, month, day, isLeap } = lunar;
-      if (unit === 'year') {
-        year += value;
-      } else if (unit === 'month') {
-        let total = month + value;
-        year += Math.floor((total - 1) / 12);
-        month = (total - 1) % 12 + 1;
-      } else if (unit === 'day') {
-        // Complex, convert to solar, add days, convert back
-        let solar = lunar2solar(lunar);
-        let date = new Date(Date.UTC(solar.year, solar.month - 1, solar.day));
-        date.setDate(date.getDate() + value);
-        return lunarCalendar.solar2lunar(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
-      }
-      
-      // Adjust day if out of range for new month
-      let leap = lunarCalendar.leapMonth(year);
-      let maxDays = lunarCalendar.monthDays(year, month);
-      if (isLeap && leap === month) maxDays = lunarCalendar.leapDays(year);
-      if (day > maxDays) day = maxDays;
-      
-      return { year, month, day, isLeap: (isLeap && leap === month) };
-    }
+    const lunarBiz = {
+        lunar2solar: function(lunar) {
+            let offset = 0;
+            // Scan from 1900
+            for (let i = 1900; i < lunar.year; i++) offset += lunarCalendar.lunarYearDays(i);
+            let leap = lunarCalendar.leapMonth(lunar.year);
+            for (let i = 1; i < lunar.month; i++) {
+                offset += lunarCalendar.monthDays(lunar.year, i);
+                if (leap > 0 && i === leap) offset += lunarCalendar.leapDays(lunar.year);
+            }
+            if (lunar.isLeap) offset += lunarCalendar.monthDays(lunar.year, lunar.month);
+            offset += lunar.day - 1;
+            
+            const baseDate = new Date(Date.UTC(1900, 0, 31));
+            const solarDate = new Date(baseDate.getTime() + offset * 86400000);
+            return {
+                year: solarDate.getUTCFullYear(),
+                month: solarDate.getUTCMonth() + 1,
+                day: solarDate.getUTCDate()
+            };
+        },
+        addLunarPeriod: function(lunar, value, unit) {
+            let { year, month, day, isLeap } = lunar;
+            if (unit === 'year') {
+                year += value;
+            } else if (unit === 'month') {
+                let total = month + value;
+                year += Math.floor((total - 1) / 12);
+                month = (total - 1) % 12 + 1;
+            } else if (unit === 'day') {
+                const solar = this.lunar2solar(lunar);
+                const date = new Date(Date.UTC(solar.year, solar.month - 1, solar.day));
+                date.setDate(date.getDate() + value);
+                return lunarCalendar.solar2lunar(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
+            }
+            
+            // Adjust day
+            let leap = lunarCalendar.leapMonth(year);
+            let maxDays = lunarCalendar.monthDays(year, month);
+            if (isLeap && leap === month) maxDays = lunarCalendar.leapDays(year);
+            if (day > maxDays) day = maxDays;
+            
+            return { year, month, day, isLeap: (isLeap && leap === month) };
+        }
+    };
     
     // UI Helpers
     function showToast(message, type = 'info') {
@@ -469,125 +482,265 @@ export const adminPage = `
           this.render();
         });
         
-        document.addEventListener('click', (e) => {
-          if (!this.picker.contains(e.target) && e.target !== this.input) {
-            this.picker.classList.remove('show');
-          }
+        this.picker.addEventListener('click', (e) => e.stopPropagation());
+        
+        this.prevBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.currentDate.setMonth(this.currentDate.getMonth() - 1);
+            this.render();
         });
         
-        this.prevBtn.addEventListener('click', (e) => { e.stopPropagation(); this.changeMonth(-1); });
-        this.nextBtn.addEventListener('click', (e) => { e.stopPropagation(); this.changeMonth(1); });
-      }
-      
-      changeMonth(delta) {
-        this.currentDate.setMonth(this.currentDate.getMonth() + delta);
-        this.render();
-      }
-      
-      selectDate(date) {
-        this.selectedDate = date;
-        const dateStr = date.toISOString().split('T')[0];
-        this.input.value = dateStr;
-        this.picker.classList.remove('show');
-        this.input.dispatchEvent(new Event('change'));
+        this.nextBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.currentDate.setMonth(this.currentDate.getMonth() + 1);
+            this.render();
+        });
+        
+        document.addEventListener('click', (e) => {
+            if (!this.picker.contains(e.target) && e.target !== this.input) {
+                this.picker.classList.remove('show');
+            }
+        });
       }
       
       render() {
         const year = this.currentDate.getFullYear();
         const month = this.currentDate.getMonth();
         
+        this.monthEl.textContent = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'][month];
         this.yearEl.textContent = year;
-        this.monthEl.textContent = month + 1;
+        
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
         
         this.calendar.innerHTML = '';
         
-        const firstDay = new Date(year, month, 1);
-        const lastDay = new Date(year, month + 1, 0);
-        const startDay = new Date(firstDay);
-        startDay.setDate(1 - firstDay.getDay()); // Start from Sunday
+        // Empty slots
+        for (let i = 0; i < firstDay; i++) {
+          const div = document.createElement('div');
+          this.calendar.appendChild(div);
+        }
         
-        for (let i = 0; i < 42; i++) {
-          const date = new Date(startDay);
-          date.setDate(startDay.getDate() + i);
+        const today = new Date();
+        
+        for (let i = 1; i <= daysInMonth; i++) {
+          const div = document.createElement('div');
+          div.className = 'calendar-day';
+          div.textContent = i;
           
-          const el = document.createElement('div');
-          el.className = 'calendar-day';
-          if (date.getMonth() !== month) el.classList.add('other-month');
-          if (date.toDateString() === new Date().toDateString()) el.classList.add('today');
-          if (this.selectedDate && date.toDateString() === this.selectedDate.toDateString()) el.classList.add('selected');
-          
-          // Lunar
-          const lunar = lunarCalendar.solar2lunar(date.getFullYear(), date.getMonth() + 1, date.getDate());
-          let lunarStr = '';
-          if (lunar !== -1) {
-            lunarStr = lunar.day === 1 ? lunar.monthStr : lunar.dayStr;
+          if (year === today.getFullYear() && month === today.getMonth() && i === today.getDate()) {
+            div.classList.add('today');
           }
           
-          el.innerHTML = '<div>' + date.getDate() + '</div><div class="lunar-text">' + lunarStr + '</div>';
-          el.addEventListener('click', (e) => { e.stopPropagation(); this.selectDate(date); });
-          this.calendar.appendChild(el);
+          if (this.selectedDate && 
+              year === this.selectedDate.getFullYear() && 
+              month === this.selectedDate.getMonth() && 
+              i === this.selectedDate.getDate()) {
+            div.classList.add('selected');
+          }
+          
+          // Lunar
+          const lunar = lunarCalendar.solar2lunar(year, month + 1, i);
+          if (lunar) {
+            const lunarSpan = document.createElement('div');
+            lunarSpan.className = 'lunar-text';
+            lunarSpan.textContent = lunar.day === 1 ? lunar.monthStr : lunar.dayStr;
+            div.appendChild(lunarSpan);
+          }
+          
+          div.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.selectDate(new Date(year, month, i));
+          });
+          
+          this.calendar.appendChild(div);
+        }
+      }
+      
+      selectDate(date) {
+        this.selectedDate = date;
+        const year = date.getFullYear();
+        const month = date.getMonth() + 1;
+        const day = date.getDate();
+        
+        this.input.value = \`\${year}-\${month.toString().padStart(2, '0')}-\${day.toString().padStart(2, '0')}\`;
+        
+        const lunar = lunarCalendar.solar2lunar(year, month, day);
+        const lunarDivId = this.input.id + 'Lunar';
+        const lunarDiv = document.getElementById(lunarDivId);
+        if (lunarDiv && lunar) {
+          lunarDiv.textContent = \`农历: \${lunar.monthStr}\${lunar.dayStr}\`;
+        }
+        
+        this.picker.classList.remove('show');
+        this.render();
+        
+        // Trigger change event manually
+        const event = new Event('change');
+        this.input.dispatchEvent(event);
+      }
+      
+      setDate(dateStr) {
+        if (!dateStr) return;
+        this.selectedDate = new Date(dateStr);
+        this.currentDate = new Date(dateStr);
+        this.input.value = dateStr;
+        
+        const lunarDivId = this.input.id + 'Lunar';
+        const lunarDiv = document.getElementById(lunarDivId);
+        if (lunarDiv) {
+            const year = this.selectedDate.getFullYear();
+            const month = this.selectedDate.getMonth() + 1;
+            const day = this.selectedDate.getDate();
+            const lunar = lunarCalendar.solar2lunar(year, month, day);
+            if (lunar) lunarDiv.textContent = \`农历: \${lunar.monthStr}\${lunar.dayStr}\`;
         }
       }
       
       destroy() {
-         // Cleanup if needed
+         // Placeholder for cleanup if needed
       }
     }
-    
-    // Main Logic
+
+    // Initialize Global Variables
+    let subscriptions = [];
     let startDatePicker, expiryDatePicker;
-    
-    function updateLunarDisplay(inputId, displayId) {
-      const dateStr = document.getElementById(inputId).value;
-      if (!dateStr) return;
-      const date = new Date(dateStr);
-      const lunar = lunarCalendar.solar2lunar(date.getFullYear(), date.getMonth() + 1, date.getDate());
-      if (lunar !== -1) {
-        document.getElementById(displayId).textContent = lunar.fullStr;
+
+    // Load Subscriptions
+    async function loadSubscriptions() {
+      const tbody = document.getElementById('subscriptionList');
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-10"><i class="fas fa-spinner fa-spin mr-2"></i>加载中...</td></tr>';
+      
+      try {
+        const res = await fetch('/api/subscriptions');
+        subscriptions = await res.json();
+        
+        renderSubscriptions();
+        updateStats();
+      } catch (err) {
+        console.error(err);
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-10 text-red-500">加载失败</td></tr>';
+        showToast('加载失败', 'error');
       }
     }
     
-    function toggleLunarDisplay() {
-      const show = document.getElementById('showLunar').checked;
-      const displays = document.querySelectorAll('#startDateLunar, #expiryDateLunar, .lunar-text');
-      displays.forEach(el => el.style.display = show ? 'block' : 'none');
+    function renderSubscriptions() {
+        const tbody = document.getElementById('subscriptionList');
+        tbody.innerHTML = '';
+        
+        if (subscriptions.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="text-center py-10 text-gray-500">暂无订阅，点击上方按钮添加</td></tr>';
+          return;
+        }
+        
+        subscriptions.sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
+        
+        const now = new Date();
+        const unitMap = { day: '天', month: '月', year: '年' };
+        
+        subscriptions.forEach(sub => {
+          const tr = document.createElement('tr');
+          const exp = new Date(sub.expiryDate);
+          // Calculate diff ignoring time
+          const today = new Date();
+          today.setHours(0,0,0,0);
+          const expDay = new Date(exp);
+          expDay.setHours(0,0,0,0);
+          const diff = Math.ceil((expDay - today) / (1000 * 60 * 60 * 24));
+          
+          let statusHtml = '';
+          if (sub.isActive === false) statusHtml = '<span class="px-2 py-1 text-xs rounded-full bg-gray-200 text-gray-800">已停用</span>';
+          else if (diff < 0) statusHtml = '<span class="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">已过期</span>';
+          else if (diff <= (sub.reminderDays || 7)) statusHtml = '<span class="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">即将到期</span>';
+          else statusHtml = '<span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">正常</span>';
+          
+          const dateStr = exp.toISOString().split('T')[0];
+          
+          tr.innerHTML = \`
+            <td class="px-6 py-4 whitespace-nowrap">
+                <div class="text-sm font-medium text-gray-900">\${sub.name}</div>
+                \${sub.notes ? \`<div class="text-xs text-gray-500">\${sub.notes}</div>\` : ''}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${sub.customType || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${sub.periodValue}\${unitMap[sub.periodUnit]}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              \${dateStr}
+              <div class="text-xs text-gray-400">\${sub.useLunar ? '农历' : '公历'}</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">\${statusHtml}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+              <button onclick="openModal('\${sub.id}')" class="text-indigo-600 hover:text-indigo-900 mr-3"><i class="fas fa-edit"></i></button>
+              <button onclick="toggleStatus('\${sub.id}', \${!sub.isActive})" class="text-blue-600 hover:text-blue-900 mr-3" title="\${sub.isActive ? '停用' : '启用'}">
+                <i class="fas \${sub.isActive ? 'fa-toggle-on' : 'fa-toggle-off'}"></i>
+              </button>
+              <button onclick="deleteSubscription('\${sub.id}')" class="text-red-600 hover:text-red-900"><i class="fas fa-trash"></i></button>
+              <button onclick="testNotify('\${sub.id}')" class="text-yellow-600 hover:text-yellow-900 ml-3" title="发送测试通知"><i class="fas fa-bell"></i></button>
+            </td>
+          \`;
+          tbody.appendChild(tr);
+        });
     }
     
-    function calculateExpiryDate() {
-      const startStr = document.getElementById('startDate').value;
-      const val = parseInt(document.getElementById('periodValue').value);
-      const unit = document.getElementById('periodUnit').value;
-      const useLunar = document.getElementById('useLunar').checked;
-      
-      if (!startStr || !val) return;
-      
-      const startDate = new Date(startStr);
-      let expiryDate;
-      
-      if (useLunar) {
-        const lunar = lunarCalendar.solar2lunar(startDate.getFullYear(), startDate.getMonth() + 1, startDate.getDate());
-        const nextLunar = addLunarPeriod(lunar, val, unit);
-        const solar = lunar2solar(nextLunar);
-        expiryDate = new Date(Date.UTC(solar.year, solar.month - 1, solar.day));
-      } else {
-        expiryDate = new Date(startDate);
-        if (unit === 'day') expiryDate.setDate(expiryDate.getDate() + val);
-        else if (unit === 'month') expiryDate.setMonth(expiryDate.getMonth() + val);
-        else if (unit === 'year') expiryDate.setFullYear(expiryDate.getFullYear() + val);
-      }
-      
-      document.getElementById('expiryDate').value = expiryDate.toISOString().split('T')[0];
-      updateLunarDisplay('expiryDate', 'expiryDateLunar');
+    function updateStats() {
+        const active = subscriptions.filter(s => s.isActive !== false).length;
+        const total = subscriptions.length;
+        
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        
+        const expiring = subscriptions.filter(s => {
+          if (s.isActive === false) return false;
+          const exp = new Date(s.expiryDate);
+          exp.setHours(0,0,0,0);
+          const diff = Math.ceil((exp - today) / (1000 * 60 * 60 * 24));
+          return diff >= 0 && diff <= 7;
+        }).length;
+        
+        document.getElementById('totalCount').textContent = total;
+        document.getElementById('activeCount').textContent = active;
+        document.getElementById('expiringCount').textContent = expiring;
+        document.getElementById('monthlyExpense').textContent = '¥0'; 
     }
     
     // Modal Functions
-    function openModal() {
+    async function openModal(id) {
       document.getElementById('subscriptionForm').reset();
       document.getElementById('subscriptionId').value = '';
       document.getElementById('modalTitle').textContent = '添加订阅';
       document.getElementById('startDate').value = new Date().toISOString().split('T')[0];
+      
+      // Default expiry +1 month
+      const nextMonth = new Date();
+      nextMonth.setMonth(nextMonth.getMonth() + 1);
+      document.getElementById('expiryDate').value = nextMonth.toISOString().split('T')[0];
+      
       document.getElementById('useLunar').checked = false;
       document.getElementById('showLunar').checked = true;
+      document.getElementById('isActive').checked = true;
+      document.getElementById('autoRenew').checked = true;
+      document.getElementById('periodValue').value = 1;
+      document.getElementById('periodUnit').value = 'month';
+      document.getElementById('reminderDays').value = 7;
+      
+      if (id) {
+          const sub = subscriptions.find(s => s.id === id);
+          if (sub) {
+             document.getElementById('modalTitle').textContent = '编辑订阅';
+             document.getElementById('subscriptionId').value = sub.id;
+             document.getElementById('name').value = sub.name;
+             document.getElementById('customType').value = sub.customType || '';
+             document.getElementById('notes').value = sub.notes || '';
+             document.getElementById('isActive').checked = sub.isActive !== false;
+             document.getElementById('autoRenew').checked = sub.autoRenew !== false;
+             document.getElementById('startDate').value = sub.startDate ? sub.startDate.split('T')[0] : '';
+             document.getElementById('expiryDate').value = sub.expiryDate.split('T')[0];
+             document.getElementById('periodValue').value = sub.periodValue || 1;
+             document.getElementById('periodUnit').value = sub.periodUnit || 'month';
+             document.getElementById('reminderDays').value = sub.reminderDays !== undefined ? sub.reminderDays : 7;
+             document.getElementById('useLunar').checked = !!sub.useLunar;
+          }
+      }
+      
       document.getElementById('subscriptionModal').classList.remove('hidden');
       
       // Init Pickers
@@ -597,6 +750,8 @@ export const adminPage = `
         startDatePicker = new CustomDatePicker('startDate', 'startDatePicker', 'startDateCalendar', 'startDateMonth', 'startDateYear', 'startDatePrevMonth', 'startDateNextMonth');
         expiryDatePicker = new CustomDatePicker('expiryDate', 'expiryDatePicker', 'expiryDateCalendar', 'expiryDateMonth', 'expiryDateYear', 'expiryDatePrevMonth', 'expiryDateNextMonth');
         updateLunarDisplay('startDate', 'startDateLunar');
+        updateLunarDisplay('expiryDate', 'expiryDateLunar');
+        toggleLunarDisplay();
       }, 50);
     }
     
@@ -637,12 +792,12 @@ export const adminPage = `
         const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
         const result = await res.json();
         
-        if (result.success) {
+        if (result.success || res.status === 200 || res.status === 201) {
           showToast('保存成功', 'success');
           document.getElementById('subscriptionModal').classList.add('hidden');
           loadSubscriptions();
         } else {
-          showToast('保存失败: ' + result.message, 'error');
+          showToast('保存失败: ' + (result.message || '未知错误'), 'error');
         }
       } catch (err) {
         showToast('保存失败', 'error');
@@ -652,114 +807,13 @@ export const adminPage = `
       }
     });
     
-    // Load Subscriptions
-    async function loadSubscriptions() {
-      const tbody = document.getElementById('subscriptionList');
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-10"><i class="fas fa-spinner fa-spin mr-2"></i>加载中...</td></tr>';
-      
-      try {
-        const res = await fetch('/api/subscriptions');
-        const subs = await res.json();
-        
-        // Update Stats
-        document.getElementById('totalCount').textContent = subs.length;
-        document.getElementById('activeCount').textContent = subs.filter(s => s.isActive !== false).length;
-        
-        // Calculate expiring
-        const now = new Date();
-        const expiring = subs.filter(s => {
-          if (s.isActive === false) return false;
-          const exp = new Date(s.expiryDate);
-          const diff = (exp - now) / (1000 * 60 * 60 * 24);
-          return diff >= 0 && diff <= 7;
-        }).length;
-        document.getElementById('expiringCount').textContent = expiring;
-        
-        // Render List
-        tbody.innerHTML = '';
-        if (subs.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" class="text-center py-10 text-gray-500">暂无订阅，点击上方按钮添加</td></tr>';
-          return;
-        }
-        
-        subs.sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
-        
-        subs.forEach(sub => {
-          const tr = document.createElement('tr');
-          const exp = new Date(sub.expiryDate);
-          const diff = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
-          
-          let statusHtml = '';
-          if (sub.isActive === false) statusHtml = '<span class="px-2 py-1 text-xs rounded-full bg-gray-200 text-gray-800">已停用</span>';
-          else if (diff < 0) statusHtml = '<span class="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">已过期</span>';
-          else if (diff <= 7) statusHtml = '<span class="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">即将到期</span>';
-          else statusHtml = '<span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">正常</span>';
-          
-          const unitMap = { day: '天', month: '月', year: '年' };
-          
-          tr.innerHTML = \`
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">\${sub.name}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${sub.customType || '-'}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${sub.periodValue}\${unitMap[sub.periodUnit]}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              \${exp.toLocaleDateString()}
-              <div class="text-xs text-gray-400">\${sub.useLunar ? '农历' : '公历'}</div>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap">\${statusHtml}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-              <button onclick="editSubscription('\${sub.id}')" class="text-indigo-600 hover:text-indigo-900 mr-3"><i class="fas fa-edit"></i></button>
-              <button onclick="deleteSubscription('\${sub.id}')" class="text-red-600 hover:text-red-900"><i class="fas fa-trash"></i></button>
-            </td>
-          \`;
-          tbody.appendChild(tr);
-        });
-        
-      } catch (err) {
-        console.error(err);
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-10 text-red-500">加载失败</td></tr>';
-      }
-    }
-    
-    async function editSubscription(id) {
-      try {
-        const res = await fetch('/api/subscriptions/' + id);
-        const sub = await res.json();
-        
-        document.getElementById('subscriptionForm').reset();
-        document.getElementById('subscriptionId').value = sub.id;
-        document.getElementById('modalTitle').textContent = '编辑订阅';
-        document.getElementById('name').value = sub.name;
-        document.getElementById('customType').value = sub.customType || '';
-        document.getElementById('notes').value = sub.notes || '';
-        document.getElementById('isActive').checked = sub.isActive !== false;
-        document.getElementById('autoRenew').checked = sub.autoRenew !== false;
-        document.getElementById('startDate').value = sub.startDate.split('T')[0];
-        document.getElementById('expiryDate').value = sub.expiryDate.split('T')[0];
-        document.getElementById('periodValue').value = sub.periodValue;
-        document.getElementById('periodUnit').value = sub.periodUnit;
-        document.getElementById('reminderDays').value = sub.reminderDays || 7;
-        document.getElementById('useLunar').checked = !!sub.useLunar;
-        
-        document.getElementById('subscriptionModal').classList.remove('hidden');
-        
-        setTimeout(() => {
-          if (startDatePicker) startDatePicker.destroy();
-          if (expiryDatePicker) expiryDatePicker.destroy();
-          startDatePicker = new CustomDatePicker('startDate', 'startDatePicker', 'startDateCalendar', 'startDateMonth', 'startDateYear', 'startDatePrevMonth', 'startDateNextMonth');
-          expiryDatePicker = new CustomDatePicker('expiryDate', 'expiryDatePicker', 'expiryDateCalendar', 'expiryDateMonth', 'expiryDateYear', 'expiryDatePrevMonth', 'expiryDateNextMonth');
-          updateLunarDisplay('startDate', 'startDateLunar');
-          updateLunarDisplay('expiryDate', 'expiryDateLunar');
-        }, 50);
-      } catch (err) {
-        showToast('加载详情失败', 'error');
-      }
-    }
-    
+    // Actions
     async function deleteSubscription(id) {
       if (!confirm('确定要删除吗？')) return;
       try {
         const res = await fetch('/api/subscriptions/' + id, { method: 'DELETE' });
-        if (res.ok) {
+        const result = await res.json();
+        if (result.success || res.ok) {
           showToast('删除成功', 'success');
           loadSubscriptions();
         } else {
@@ -768,6 +822,85 @@ export const adminPage = `
       } catch (err) {
         showToast('删除失败', 'error');
       }
+    }
+    
+    async function toggleStatus(id, isActive) {
+      try {
+        const res = await fetch('/api/subscriptions/' + id + '/toggle-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isActive })
+        });
+        const result = await res.json();
+        if (result.success) {
+          showToast('状态更新成功', 'success');
+          loadSubscriptions();
+        } else {
+          showToast('更新失败', 'error');
+        }
+      } catch (error) {
+        showToast('更新失败', 'error');
+      }
+    }
+    
+    async function testNotify(id) {
+        try {
+            showToast('发送测试通知...', 'info');
+            const res = await fetch('/api/subscriptions/' + id + '/test-notify', { method: 'POST' });
+            const result = await res.json();
+            if (result.success) {
+                showToast('测试通知已发送', 'success');
+            } else {
+                showToast(result.message || '发送失败', 'error');
+            }
+        } catch (e) {
+            showToast('发送失败', 'error');
+        }
+    }
+    
+    // Helpers
+    function updateLunarDisplay(inputId, displayId) {
+      const dateStr = document.getElementById(inputId).value;
+      if (!dateStr) return;
+      const date = new Date(dateStr);
+      const lunar = lunarCalendar.solar2lunar(date.getFullYear(), date.getMonth() + 1, date.getDate());
+      if (lunar !== -1) {
+        document.getElementById(displayId).textContent = lunar.fullStr;
+      }
+    }
+    
+    function toggleLunarDisplay() {
+      const show = document.getElementById('showLunar').checked;
+      const displays = document.querySelectorAll('#startDateLunar, #expiryDateLunar, .lunar-text');
+      displays.forEach(el => el.style.display = show ? 'block' : 'none');
+    }
+    
+    function calculateExpiryDate() {
+      const startStr = document.getElementById('startDate').value;
+      const val = parseInt(document.getElementById('periodValue').value);
+      const unit = document.getElementById('periodUnit').value;
+      const useLunar = document.getElementById('useLunar').checked;
+      
+      if (!startStr || !val) return;
+      
+      const startDate = new Date(startStr);
+      let expiryDate;
+      
+      if (useLunar) {
+        const lunar = lunarCalendar.solar2lunar(startDate.getFullYear(), startDate.getMonth() + 1, startDate.getDate());
+        if (lunar === -1) return;
+        const nextLunar = lunarBiz.addLunarPeriod(lunar, val, unit);
+        const solar = lunarBiz.lunar2solar(nextLunar);
+        expiryDate = new Date(Date.UTC(solar.year, solar.month - 1, solar.day));
+      } else {
+        expiryDate = new Date(startDate);
+        if (unit === 'day') expiryDate.setDate(expiryDate.getDate() + val);
+        else if (unit === 'month') expiryDate.setMonth(expiryDate.getMonth() + val);
+        else if (unit === 'year') expiryDate.setFullYear(expiryDate.getFullYear() + val);
+      }
+      
+      document.getElementById('expiryDate').value = expiryDate.toISOString().split('T')[0];
+      updateLunarDisplay('expiryDate', 'expiryDateLunar');
     }
     
     // Init

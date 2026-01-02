@@ -203,6 +203,11 @@ export class SubscriptionService {
     const config = await getConfig(this.env);
     const timezone = config.timezone || 'UTC';
     const currentTime = getCurrentTimeInTimezone(timezone);
+    
+    // Normalize current time to start of day for accurate day calculation
+    const today = new Date(currentTime);
+    today.setHours(0, 0, 0, 0);
+
     const notifications: { subscription: Subscription; daysUntil: number }[] = [];
     let hasUpdates = false;
 
@@ -210,50 +215,97 @@ export class SubscriptionService {
       let sub = subscriptions[i];
       if (!sub.isActive) continue;
 
-      const expiryDate = new Date(sub.expiryDate);
-      const daysUntilExpiry = Math.ceil((expiryDate.getTime() - currentTime.getTime()) / (1000 * 60 * 60 * 24));
+      let expiryDate = new Date(sub.expiryDate);
+      
+      // Calculate days remaining
+      // For calculation, we need to compare dates without time component
+      const expiryCheck = new Date(expiryDate);
+      expiryCheck.setHours(0, 0, 0, 0);
+      
+      const diffTime = expiryCheck.getTime() - today.getTime();
+      const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-      if (daysUntilExpiry <= (sub.reminderDays || 7)) {
-        notifications.push({ subscription: sub, daysUntil: daysUntilExpiry });
-      }
-
-      // Auto-renew logic
-      if (sub.autoRenew && daysUntilExpiry <= 0) {
-        // Calculate next expiry
-        let nextExpiryDate = new Date(expiryDate);
-        if (sub.useLunar) {
-           let lunar = lunarCalendar.solar2lunar(nextExpiryDate.getFullYear(), nextExpiryDate.getMonth() + 1, nextExpiryDate.getDate());
-           if (lunar && sub.periodValue && sub.periodUnit) {
-              do {
-                 lunar = lunarBiz.addLunarPeriod(lunar, sub.periodValue, sub.periodUnit);
-                 const solar = lunarBiz.lunar2solar(lunar);
-                 if (!solar) break;
-                 nextExpiryDate = new Date(solar.year, solar.month - 1, solar.day);
-              } while (nextExpiryDate <= currentTime);
-           }
-        } else {
-           if (sub.periodValue && sub.periodUnit) {
-              while (nextExpiryDate <= currentTime) {
-                 if (sub.periodUnit === 'day') nextExpiryDate.setDate(nextExpiryDate.getDate() + sub.periodValue);
-                 else if (sub.periodUnit === 'month') nextExpiryDate.setMonth(nextExpiryDate.getMonth() + sub.periodValue);
-                 else if (sub.periodUnit === 'year') nextExpiryDate.setFullYear(nextExpiryDate.getFullYear() + sub.periodValue);
-              }
-           }
-        }
-        
-        if (nextExpiryDate.getTime() !== expiryDate.getTime()) {
-           sub.expiryDate = nextExpiryDate.toISOString();
-           sub.updatedAt = new Date().toISOString();
-           subscriptions[i] = sub;
-           hasUpdates = true;
-        }
+      // Check for auto-renewal if expired
+      if (daysRemaining < 0 && sub.autoRenew) {
+          // Auto-renew logic
+          console.log(`[AutoRenew] Renewing subscription: ${sub.name}`);
+          
+          // Calculate next expiry date based on period
+          if (sub.useLunar) {
+             const currentLunar = lunarCalendar.solar2lunar(
+                expiryDate.getFullYear(),
+                expiryDate.getMonth() + 1,
+                expiryDate.getDate()
+             );
+             if (currentLunar) {
+                 // Add period to lunar date
+                 // We loop until the new expiry date is in the future relative to NOW
+                 // However, for strict adherence to period, we just add one period.
+                 // But if it's long expired, we might need to add multiple.
+                 // Let's assume we add one period at a time or enough to be future.
+                 // Standard logic: Add period until > today.
+                 
+                 let nextLunar = currentLunar;
+                 let nextSolarDate = expiryDate;
+                 
+                 do {
+                     nextLunar = lunarBiz.addLunarPeriod(nextLunar, sub.periodValue || 1, sub.periodUnit || 'month');
+                     const solar = lunarBiz.lunar2solar(nextLunar);
+                     if (!solar) break;
+                     nextSolarDate = new Date(solar.year, solar.month - 1, solar.day);
+                 } while (nextSolarDate < today);
+                 
+                 sub.expiryDate = nextSolarDate.toISOString();
+             }
+          } else {
+             // Solar auto-renew
+             do {
+                if (sub.periodUnit === 'day') {
+                   expiryDate.setDate(expiryDate.getDate() + (sub.periodValue || 1));
+                } else if (sub.periodUnit === 'month') {
+                   expiryDate.setMonth(expiryDate.getMonth() + (sub.periodValue || 1));
+                } else if (sub.periodUnit === 'year') {
+                   expiryDate.setFullYear(expiryDate.getFullYear() + (sub.periodValue || 1));
+                }
+             } while (expiryDate < today);
+             sub.expiryDate = expiryDate.toISOString();
+          }
+          
+          sub.updatedAt = new Date().toISOString();
+          subscriptions[i] = sub;
+          hasUpdates = true;
+          
+          // Recalculate days remaining for the renewed subscription
+          const newExpiry = new Date(sub.expiryDate);
+          newExpiry.setHours(0, 0, 0, 0);
+          const newDiff = newExpiry.getTime() - today.getTime();
+          const newDaysRemaining = Math.ceil(newDiff / (1000 * 60 * 60 * 24));
+          
+          // Add to notifications as "Renewed" or just status update?
+          // Usually we want to notify that it was renewed or is now due in X days.
+          // If it's renewed, it might be far in future, so maybe no notification unless reminderDays matches.
+          // But if we want to notify "Renewed", we might need a special flag.
+          // For now, let's just check against reminderDays again.
+          
+          if (newDaysRemaining <= (sub.reminderDays || 7) && newDaysRemaining >= 0) {
+             notifications.push({ subscription: sub, daysUntil: newDaysRemaining });
+          }
+      } else {
+          // Regular check
+          if (daysRemaining <= (sub.reminderDays || 7) && daysRemaining >= 0) {
+              notifications.push({ subscription: sub, daysUntil: daysRemaining });
+          } else if (daysRemaining < 0) {
+              // Expired and not auto-renewed
+              notifications.push({ subscription: sub, daysUntil: daysRemaining });
+          }
       }
     }
 
     if (hasUpdates) {
-      await this.env.SUBSCRIPTIONS_KV.put('subscriptions', JSON.stringify(subscriptions));
+       await this.env.SUBSCRIPTIONS_KV.put('subscriptions', JSON.stringify(subscriptions));
     }
 
     return { notifications };
   }
+
 }

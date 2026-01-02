@@ -1,14 +1,14 @@
 
-import { Env, ChannelConfig, Subscription } from '../types';
+import { Env, ChannelConfig, Subscription, Config } from '../types';
 import { formatTimeInTimezone, formatTimezoneDisplay } from '../utils/date';
 import { lunarCalendar } from '../utils/lunar';
 
 /**
  * 格式化通知内容
  */
-export function formatNotificationContent(subscriptions: Subscription[], config: any): string {
-  const showLunar = config.SHOW_LUNAR === true;
-  const timezone = config?.TIMEZONE || 'UTC';
+export function formatNotificationContent(subscriptions: Subscription[], config: Config): string {
+  const showLunar = config.showLunarGlobal === true;
+  const timezone = config.timezone || 'UTC';
   let content = '';
 
   for (const sub of subscriptions) {
@@ -73,43 +73,43 @@ export function formatNotificationContent(subscriptions: Subscription[], config:
 /**
  * 发送通知到所有启用的渠道
  */
-export async function sendNotificationToAllChannels(title: string, commonContent: string, config: any, logPrefix = '[定时任务]'): Promise<void> {
-    if (!config.ENABLED_NOTIFIERS || config.ENABLED_NOTIFIERS.length === 0) {
+export async function sendNotificationToAllChannels(title: string, commonContent: string, config: Config, logPrefix = '[定时任务]'): Promise<void> {
+    if (!config.enabledNotifiers || config.enabledNotifiers.length === 0) {
         console.log(`${logPrefix} 未启用任何通知渠道。`);
         return;
     }
 
-    if (config.ENABLED_NOTIFIERS.includes('notifyx')) {
+    if (config.enabledNotifiers.includes('notifyx')) {
         const notifyxContent = `## ${title}\n\n${commonContent}`;
         const success = await sendNotifyXNotification(title, notifyxContent, `订阅提醒`, config);
         console.log(`${logPrefix} 发送NotifyX通知 ${success ? '成功' : '失败'}`);
     }
-    if (config.ENABLED_NOTIFIERS.includes('wenotify')) {
+    if (config.enabledNotifiers.includes('wenotify')) {
         const wenotifyContent = commonContent.replace(/(\**|\*|##|#|`)/g, '');
         const success = await sendWeNotifyEdgeNotification(title, wenotifyContent, config);
         console.log(`${logPrefix} 发送WeNotify Edge通知 ${success ? '成功' : '失败'}`);
     }
-    if (config.ENABLED_NOTIFIERS.includes('telegram')) {
+    if (config.enabledNotifiers.includes('telegram')) {
         const telegramContent = `*${title}*\n\n${commonContent}`;
         const success = await sendTelegramNotification(telegramContent, config);
         console.log(`${logPrefix} 发送Telegram通知 ${success ? '成功' : '失败'}`);
     }
-    if (config.ENABLED_NOTIFIERS.includes('webhook')) {
+    if (config.enabledNotifiers.includes('webhook')) {
         const webhookContent = commonContent.replace(/(\**|\*|##|#|`)/g, '');
         const success = await sendWebhookNotification(title, webhookContent, config);
         console.log(`${logPrefix} 发送企业微信应用通知 ${success ? '成功' : '失败'}`);
     }
-    if (config.ENABLED_NOTIFIERS.includes('wechatbot')) {
+    if (config.enabledNotifiers.includes('wechatbot')) {
         const wechatbotContent = commonContent.replace(/(\**|\*|##|#|`)/g, '');
         const success = await sendWechatBotNotification(title, wechatbotContent, config);
         console.log(`${logPrefix} 发送企业微信机器人通知 ${success ? '成功' : '失败'}`);
     }
-    if (config.ENABLED_NOTIFIERS.includes('email')) {
+    if (config.enabledNotifiers.includes('email')) {
         const emailContent = commonContent.replace(/(\**|\*|##|#|`)/g, '');
         const success = await sendEmailNotification(title, emailContent, config);
         console.log(`${logPrefix} 发送邮件通知 ${success ? '成功' : '失败'}`);
     }
-    if (config.ENABLED_NOTIFIERS.includes('bark')) {
+    if (config.enabledNotifiers.includes('bark')) {
         const barkContent = commonContent.replace(/(\**|\*|##|#|`)/g, '');
         const success = await sendBarkNotification(title, barkContent, config);
         console.log(`${logPrefix} 发送Bark通知 ${success ? '成功' : '失败'}`);
@@ -117,19 +117,19 @@ export async function sendNotificationToAllChannels(title: string, commonContent
 }
 
 // Telegram
-export async function sendTelegramNotification(message: string, config: any): Promise<boolean> {
+export async function sendTelegramNotification(message: string, config: Config): Promise<boolean> {
   try {
-    if (!config.TG_BOT_TOKEN || !config.TG_CHAT_ID) {
+    if (!config.telegram?.botToken || !config.telegram?.chatId) {
       console.error('[Telegram] 通知未配置，缺少Bot Token或Chat ID');
       return false;
     }
 
-    const url = 'https://api.telegram.org/bot' + config.TG_BOT_TOKEN + '/sendMessage';
+    const url = 'https://api.telegram.org/bot' + config.telegram.botToken + '/sendMessage';
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chat_id: config.TG_CHAT_ID,
+        chat_id: config.telegram.chatId,
         text: message,
         parse_mode: 'Markdown'
       })
@@ -144,14 +144,14 @@ export async function sendTelegramNotification(message: string, config: any): Pr
 }
 
 // NotifyX
-export async function sendNotifyXNotification(title: string, content: string, description: string, config: any): Promise<boolean> {
+export async function sendNotifyXNotification(title: string, content: string, description: string, config: Config): Promise<boolean> {
   try {
-    if (!config.NOTIFYX_API_KEY) {
+    if (!config.notifyx?.apiKey) {
       console.error('[NotifyX] 通知未配置，缺少API Key');
       return false;
     }
 
-    const url = 'https://www.notifyx.cn/api/v1/send/' + config.NOTIFYX_API_KEY;
+    const url = 'https://www.notifyx.cn/api/v1/send/' + config.notifyx.apiKey;
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -171,29 +171,29 @@ export async function sendNotifyXNotification(title: string, content: string, de
 }
 
 // WeNotify Edge
-export async function sendWeNotifyEdgeNotification(title: string, content: string, config: any): Promise<boolean> {
+export async function sendWeNotifyEdgeNotification(title: string, content: string, config: Config): Promise<boolean> {
   try {
-    if (!config.WENOTIFY_URL || !config.WENOTIFY_TOKEN) {
+    if (!config.wenotify?.url || !config.wenotify?.token) {
       console.error('[WeNotify Edge] 通知未配置，缺少服务地址或Token');
       return false;
     }
-    let base = config.WENOTIFY_URL.trim().replace(/\/+$/, '');
+    let base = config.wenotify.url.trim().replace(/\/+$/, '');
     let url = base.endsWith('/wxsend') ? base : base + '/wxsend';
     const body: any = {
       title: title,
       content: content
     };
-    if (config.WENOTIFY_USERID) {
-      body.userid = config.WENOTIFY_USERID;
+    if (config.wenotify.userid) {
+      body.userid = config.wenotify.userid;
     }
-    if (config.WENOTIFY_TEMPLATE_ID) {
-      body.template_id = config.WENOTIFY_TEMPLATE_ID;
+    if (config.wenotify.templateId) {
+      body.template_id = config.wenotify.templateId;
     }
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + config.WENOTIFY_TOKEN
+        'Authorization': 'Bearer ' + config.wenotify.token
       },
       body: JSON.stringify(body)
     });
@@ -205,22 +205,22 @@ export async function sendWeNotifyEdgeNotification(title: string, content: strin
 }
 
 // Bark
-export async function sendBarkNotification(title: string, content: string, config: any): Promise<boolean> {
+export async function sendBarkNotification(title: string, content: string, config: Config): Promise<boolean> {
   try {
-    if (!config.BARK_DEVICE_KEY) {
+    if (!config.bark?.deviceKey) {
       console.error('[Bark] 通知未配置，缺少设备Key');
       return false;
     }
 
-    const serverUrl = config.BARK_SERVER || 'https://api.day.app';
+    const serverUrl = config.bark.server || 'https://api.day.app';
     const url = serverUrl + '/push';
     const payload: any = {
       title: title,
       body: content,
-      device_key: config.BARK_DEVICE_KEY
+      device_key: config.bark.deviceKey
     };
 
-    if (config.BARK_IS_ARCHIVE === 'true') {
+    if (config.bark.isArchive === 'true') {
       payload.isArchive = 1;
     }
 
@@ -241,9 +241,9 @@ export async function sendBarkNotification(title: string, content: string, confi
 }
 
 // Email
-export async function sendEmailNotification(title: string, content: string, config: any): Promise<boolean> {
+export async function sendEmailNotification(title: string, content: string, config: Config): Promise<boolean> {
   try {
-    if (!config.RESEND_API_KEY || !config.EMAIL_FROM || !config.EMAIL_TO) {
+    if (!config.email?.resendApiKey || !config.email?.fromEmail || !config.email?.toEmail) {
       console.error('[邮件通知] 通知未配置，缺少必要参数');
       return false;
     }
@@ -280,25 +280,25 @@ export async function sendEmailNotification(title: string, content: string, conf
             <p>此邮件由订阅管理系统自动发送，请及时处理相关订阅事务。</p>
         </div>
         <div class="footer">
-            <p>订阅管理系统 | 发送时间: ${formatTimeInTimezone(new Date(), config?.TIMEZONE || 'UTC', 'datetime')}</p>
+            <p>订阅管理系统 | 发送时间: ${formatTimeInTimezone(new Date(), config.timezone || 'UTC', 'datetime')}</p>
         </div>
     </div>
 </body>
 </html>`;
 
-    const fromEmail = config.EMAIL_FROM_NAME ?
-      `${config.EMAIL_FROM_NAME} <${config.EMAIL_FROM}>` :
-      config.EMAIL_FROM;
+    const fromEmail = config.email.fromEmail.includes('<') ? 
+      config.email.fromEmail :
+      (config.email.fromEmail ? `Notification <${config.email.fromEmail}>` : '');
 
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${config.RESEND_API_KEY}`,
+        'Authorization': `Bearer ${config.email.resendApiKey}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         from: fromEmail,
-        to: config.EMAIL_TO,
+        to: config.email.toEmail,
         subject: title,
         html: htmlContent,
         text: content
@@ -314,16 +314,16 @@ export async function sendEmailNotification(title: string, content: string, conf
 }
 
 // 企业微信应用通知 (Webhook)
-export async function sendWebhookNotification(title: string, content: string, config: any): Promise<boolean> {
+export async function sendWebhookNotification(title: string, content: string, config: Config): Promise<boolean> {
   try {
-    if (!config.WEBHOOK_URL) {
+    if (!config.webhook?.url) {
       console.error('[企业微信应用通知] 未配置 Webhook URL');
       return false;
     }
 
-    const method = config.WEBHOOK_METHOD || 'POST';
-    const headers = config.WEBHOOK_HEADERS ? JSON.parse(config.WEBHOOK_HEADERS) : { 'Content-Type': 'application/json' };
-    const template = config.WEBHOOK_TEMPLATE ? JSON.parse(config.WEBHOOK_TEMPLATE) : null;
+    const method = config.webhook.method || 'POST';
+    const headers = config.webhook.headers ? JSON.parse(config.webhook.headers) : { 'Content-Type': 'application/json' };
+    const template = config.webhook.template ? JSON.parse(config.webhook.template) : null;
 
     let body;
     if (template) {
@@ -344,7 +344,7 @@ export async function sendWebhookNotification(title: string, content: string, co
       });
     }
 
-    const response = await fetch(config.WEBHOOK_URL, {
+    const response = await fetch(config.webhook.url, {
       method: method,
       headers: headers,
       body: method !== 'GET' ? body : undefined
@@ -358,14 +358,14 @@ export async function sendWebhookNotification(title: string, content: string, co
 }
 
 // 企业微信机器人
-export async function sendWechatBotNotification(title: string, content: string, config: any): Promise<boolean> {
+export async function sendWechatBotNotification(title: string, content: string, config: Config): Promise<boolean> {
   try {
-    if (!config.WECHATBOT_WEBHOOK) {
+    if (!config.wechatBot?.webhook) {
       console.error('[企业微信机器人] 未配置 Webhook URL');
       return false;
     }
 
-    const msgType = config.WECHATBOT_MSG_TYPE || 'text';
+    const msgType = config.wechatBot.msgType || 'text';
     let messageData: any;
 
     if (msgType === 'markdown') {
@@ -386,12 +386,12 @@ export async function sendWechatBotNotification(title: string, content: string, 
       };
     }
 
-    if (config.WECHATBOT_AT_ALL === 'true') {
+    if (config.wechatBot.atAll === 'true') {
       if (msgType === 'text') {
         messageData.text.mentioned_list = ['@all'];
       }
-    } else if (config.WECHATBOT_AT_MOBILES) {
-      const mobiles = config.WECHATBOT_AT_MOBILES.split(',').map((m: string) => m.trim()).filter((m: string) => m);
+    } else if (config.wechatBot.atMobiles) {
+      const mobiles = config.wechatBot.atMobiles.split(',').map((m: string) => m.trim()).filter((m: string) => m);
       if (mobiles.length > 0) {
         if (msgType === 'text') {
           messageData.text.mentioned_mobile_list = mobiles;
@@ -399,7 +399,7 @@ export async function sendWechatBotNotification(title: string, content: string, 
       }
     }
 
-    const response = await fetch(config.WECHATBOT_WEBHOOK, {
+    const response = await fetch(config.wechatBot.webhook, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

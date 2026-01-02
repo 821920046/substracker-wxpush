@@ -15,7 +15,7 @@ import {
   sendBarkNotification,
   formatNotificationContent
 } from './services/notification';
-import { getConfig, generateRandomSecret } from './utils/config';
+import { getConfig, getRawConfig, generateRandomSecret } from './utils/config';
 import { generateJWT, verifyJWT } from './utils/auth';
 import { getCurrentTimeInTimezone, formatTimeInTimezone } from './utils/date';
 import { getCookieValue } from './utils/http';
@@ -45,7 +45,7 @@ export default {
 
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     const config = await getConfig(env);
-    const timezone = config?.TIMEZONE || 'UTC';
+    const timezone = config.timezone || 'UTC';
     const currentTime = getCurrentTimeInTimezone(timezone);
     console.log('[Workers] 定时任务触发 UTC:', new Date().toISOString(), timezone + ':', currentTime.toLocaleString('zh-CN', {timeZone: timezone}));
     
@@ -79,7 +79,7 @@ async function handleAdminRequest(request: Request, env: Env): Promise<Response>
     const url = new URL(request.url);
     const token = getCookieValue(request.headers.get('Cookie'), 'token');
     const config = await getConfig(env);
-    const user = token ? await verifyJWT(token, config.JWT_SECRET) : null;
+    const user = token ? await verifyJWT(token, config.jwtSecret!) : null;
 
     if (!user) {
       return new Response('', {
@@ -113,8 +113,8 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
   if (path === '/login' && method === 'POST') {
     try {
       const body: any = await request.json();
-      if (body.username === config.ADMIN_USERNAME && body.password === config.ADMIN_PASSWORD) {
-        const token = await generateJWT(body.username, config.JWT_SECRET);
+      if (body.username === config.adminUsername && body.password === config.adminPassword) {
+        const token = await generateJWT(body.username, config.jwtSecret!);
         return new Response(JSON.stringify({ success: true }), {
           headers: {
             'Content-Type': 'application/json',
@@ -173,7 +173,7 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
 
   // Auth Check for other APIs
   const token = getCookieValue(request.headers.get('Cookie'), 'token');
-  const user = token ? await verifyJWT(token, config.JWT_SECRET) : null;
+  const user = token ? await verifyJWT(token, config.jwtSecret!) : null;
 
   if (!user) {
     return new Response(JSON.stringify({ success: false, message: 'Unauthorized' }), {
@@ -185,15 +185,18 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
   // Config API
   if (path === '/config') {
     if (method === 'GET') {
-      const { JWT_SECRET, ADMIN_PASSWORD, ...safeConfig } = config;
+      const rawConfig = await getRawConfig(env);
+      const { JWT_SECRET, ADMIN_PASSWORD, ...safeConfig } = rawConfig;
       return new Response(JSON.stringify(safeConfig), { headers: { 'Content-Type': 'application/json' } });
     }
     if (method === 'POST') {
       try {
         const newConfig: any = await request.json();
+        const currentRawConfig = await getRawConfig(env);
+        
         const updatedConfig = {
-            ...config,
-            ADMIN_USERNAME: newConfig.ADMIN_USERNAME || config.ADMIN_USERNAME,
+            ...currentRawConfig,
+            ADMIN_USERNAME: newConfig.ADMIN_USERNAME || currentRawConfig.ADMIN_USERNAME,
             TG_BOT_TOKEN: newConfig.TG_BOT_TOKEN || '',
             TG_CHAT_ID: newConfig.TG_CHAT_ID || '',
             NOTIFYX_API_KEY: newConfig.NOTIFYX_API_KEY || '',
@@ -218,7 +221,7 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
             BARK_SERVER: newConfig.BARK_SERVER || 'https://api.day.app',
             BARK_IS_ARCHIVE: newConfig.BARK_IS_ARCHIVE || 'false',
             ENABLED_NOTIFIERS: newConfig.ENABLED_NOTIFIERS || ['notifyx'],
-            TIMEZONE: newConfig.TIMEZONE || config.TIMEZONE || 'UTC'
+            TIMEZONE: newConfig.TIMEZONE || currentRawConfig.TIMEZONE || 'UTC'
         };
         
         if (newConfig.ADMIN_PASSWORD) {
@@ -242,31 +245,60 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
     try {
         const body: any = await request.json();
         let success = false;
-        let message = '';
         
-        // Mock config for test
-        const testConfig = { ...config, ...body }; 
-        // Note: body contains specific fields like TG_BOT_TOKEN which overlay on config.
-        // The original code manually mapped fields. Here we can be a bit more dynamic or strict.
-        // Let's stick to strict mapping as per original to avoid pollution if needed, 
-        // but spreading body over config is easier if field names match.
-        // The original code constructed `testConfig` manually for each type.
+        // Create temporary config for test with overrides
+        const tempConfig = { ...config };
         
         if (body.type === 'telegram') {
+            tempConfig.telegram = {
+                botToken: body.TG_BOT_TOKEN || config.telegram?.botToken || '',
+                chatId: body.TG_CHAT_ID || config.telegram?.chatId || ''
+            };
             const content = '*测试通知*\n\n这是一条测试通知...';
-            success = await sendTelegramNotification(content, { ...config, TG_BOT_TOKEN: body.TG_BOT_TOKEN, TG_CHAT_ID: body.TG_CHAT_ID });
+            success = await sendTelegramNotification(content, tempConfig);
         } else if (body.type === 'notifyx') {
-            success = await sendNotifyXNotification('测试通知', '## 测试通知...', '测试描述', { ...config, NOTIFYX_API_KEY: body.NOTIFYX_API_KEY });
+            tempConfig.notifyx = {
+                apiKey: body.NOTIFYX_API_KEY || config.notifyx?.apiKey || ''
+            };
+            success = await sendNotifyXNotification('测试通知', '## 测试通知...', '测试描述', tempConfig);
         } else if (body.type === 'wenotify') {
-            success = await sendWeNotifyEdgeNotification('测试通知', '测试通知...', { ...config, WENOTIFY_URL: body.WENOTIFY_URL, WENOTIFY_TOKEN: body.WENOTIFY_TOKEN, WENOTIFY_USERID: body.WENOTIFY_USERID, WENOTIFY_TEMPLATE_ID: body.WENOTIFY_TEMPLATE_ID });
+            tempConfig.wenotify = {
+                url: body.WENOTIFY_URL || config.wenotify?.url || '',
+                token: body.WENOTIFY_TOKEN || config.wenotify?.token || '',
+                userid: body.WENOTIFY_USERID || config.wenotify?.userid || '',
+                templateId: body.WENOTIFY_TEMPLATE_ID || config.wenotify?.templateId || ''
+            };
+            success = await sendWeNotifyEdgeNotification('测试通知', '测试通知...', tempConfig);
         } else if (body.type === 'webhook') {
-            success = await sendWebhookNotification('测试通知', '测试通知...', { ...config, WEBHOOK_URL: body.WEBHOOK_URL, WEBHOOK_METHOD: body.WEBHOOK_METHOD, WEBHOOK_HEADERS: body.WEBHOOK_HEADERS, WEBHOOK_TEMPLATE: body.WEBHOOK_TEMPLATE });
+            tempConfig.webhook = {
+                url: body.WEBHOOK_URL || config.webhook?.url || '',
+                method: body.WEBHOOK_METHOD || config.webhook?.method || 'POST',
+                headers: body.WEBHOOK_HEADERS || config.webhook?.headers || '',
+                template: body.WEBHOOK_TEMPLATE || config.webhook?.template || ''
+            };
+            success = await sendWebhookNotification('测试通知', '测试通知...', tempConfig);
         } else if (body.type === 'wechatbot') {
-            success = await sendWechatBotNotification('测试通知', '测试通知...', { ...config, WECHATBOT_WEBHOOK: body.WECHATBOT_WEBHOOK, WECHATBOT_MSG_TYPE: body.WECHATBOT_MSG_TYPE, WECHATBOT_AT_MOBILES: body.WECHATBOT_AT_MOBILES, WECHATBOT_AT_ALL: body.WECHATBOT_AT_ALL });
+            tempConfig.wechatBot = {
+                webhook: body.WECHATBOT_WEBHOOK || config.wechatBot?.webhook || '',
+                msgType: body.WECHATBOT_MSG_TYPE || config.wechatBot?.msgType || 'text',
+                atMobiles: body.WECHATBOT_AT_MOBILES || config.wechatBot?.atMobiles || '',
+                atAll: body.WECHATBOT_AT_ALL || config.wechatBot?.atAll || 'false'
+            };
+            success = await sendWechatBotNotification('测试通知', '测试通知...', tempConfig);
         } else if (body.type === 'email') {
-            success = await sendEmailNotification('测试通知', '测试通知...', { ...config, RESEND_API_KEY: body.RESEND_API_KEY, EMAIL_FROM: body.EMAIL_FROM, EMAIL_FROM_NAME: body.EMAIL_FROM_NAME, EMAIL_TO: body.EMAIL_TO });
+            tempConfig.email = {
+                resendApiKey: body.RESEND_API_KEY || config.email?.resendApiKey || '',
+                fromEmail: body.EMAIL_FROM || config.email?.fromEmail || '',
+                toEmail: body.EMAIL_TO || config.email?.toEmail || ''
+            };
+            success = await sendEmailNotification('测试通知', '测试通知...', tempConfig);
         } else if (body.type === 'bark') {
-            success = await sendBarkNotification('测试通知', '测试通知...', { ...config, BARK_SERVER: body.BARK_SERVER, BARK_DEVICE_KEY: body.BARK_DEVICE_KEY, BARK_IS_ARCHIVE: body.BARK_IS_ARCHIVE });
+            tempConfig.bark = {
+                server: body.BARK_SERVER || config.bark?.server || '',
+                deviceKey: body.BARK_DEVICE_KEY || config.bark?.deviceKey || '',
+                isArchive: body.BARK_IS_ARCHIVE || config.bark?.isArchive || 'false'
+            };
+            success = await sendBarkNotification('测试通知', '测试通知...', tempConfig);
         }
         
         return new Response(JSON.stringify({ success, message: success ? '发送成功' : '发送失败' }), { headers: { 'Content-Type': 'application/json' } });
