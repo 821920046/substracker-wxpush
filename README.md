@@ -1,4 +1,4 @@
-# SubsTracker-wxpush
+# SubsTracker-Wxpush
 
 一个基于 Cloudflare Workers 的订阅到期提醒项目。仅集成微信模板消息推送，提供订阅管理、到期检查、计划任务触发等能力。
 
