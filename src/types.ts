@@ -1,0 +1,113 @@
+export interface Subscription {
+  id: string;
+  name: string;
+  customType?: string;
+  startDate?: string | null;
+  expiryDate: string; // ISO date string
+  periodValue?: number;
+  periodUnit?: 'year' | 'month' | 'day';
+  reminderDays?: number;
+  notes?: string;
+  isActive: boolean;
+  autoRenew: boolean;
+  useLunar?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  
+  // Legacy or alternative fields mapping (if needed)
+  // type?: 'solar' | 'lunar'; // Mapped to useLunar
+  // cycle?: ... // Mapped to periodValue/Unit
+  // notifyTime?: ... // Mapped to reminderDays
+}
+
+export interface ChannelConfig {
+  enabled: boolean;
+  [key: string]: any;
+}
+
+export interface TelegramConfig {
+  botToken: string;
+  chatId: string;
+}
+
+export interface NotifyXConfig {
+  apiKey: string;
+}
+
+export interface WeNotifyConfig {
+  url: string;
+  token: string;
+  userid?: string;
+  templateId?: string;
+}
+
+export interface WebhookConfig {
+  url: string;
+  method: string;
+  headers?: string;
+  template?: string;
+}
+
+export interface EmailConfig {
+  resendApiKey: string;
+  fromEmail: string;
+  toEmail: string;
+}
+
+export interface BarkConfig {
+  server: string;
+  deviceKey: string;
+  isArchive?: string;
+}
+
+export interface WeChatBotConfig {
+  webhook: string;
+  msgType: string;
+  atMobiles?: string;
+  atAll?: string;
+}
+
+export interface Config {
+  adminUsername?: string;
+  adminPassword?: string;
+  jwtSecret?: string;
+  timezone?: string;
+  showLunarGlobal?: boolean;
+  enabledNotifiers: string[];
+  telegram?: TelegramConfig;
+  notifyx?: NotifyXConfig;
+  wenotify?: WeNotifyConfig;
+  wechatBot?: WeChatBotConfig;
+  webhook?: WebhookConfig;
+  email?: EmailConfig;
+  bark?: BarkConfig;
+}
+
+export interface Env {
+  SUBSCRIPTIONS_KV: KVNamespace;
+  JWT_SECRET?: string;
+}
+
+export interface LunarDate {
+  lunarYear: number;
+  lunarMonth: number;
+  lunarDay: number;
+  isLeap: boolean;
+  solarDate: string; // YYYY-MM-DD
+}
+
+export interface DebugInfo {
+  timestamp: string;
+}
+
+export interface User {
+  username: string;
+  iat: number;
+}
+  pathname: string;
+  kvBinding: boolean;
+  configExists: boolean;
+  adminUsername: string;
+  hasJwtSecret: boolean;
+  jwtSecretLength: number;
+}

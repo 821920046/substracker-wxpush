@@ -1,308 +1,341 @@
-export interface Env {
-  SUBSCRIPTIONS_KV: KVNamespace;
-  WXPUSH_KV?: KVNamespace;
-  API_TOKEN: string;
-  WX_APPID: string;
-  WX_SECRET: string;
-  WX_USERID: string;
-  WX_TEMPLATE_ID: string;
-}
-
-type Subscription = {
-  id: string;
-  name: string;
-  expireDate: string;
-  remindDays: number;
-  enabled: boolean;
-  remark?: string;
-};
-
-function json(data: unknown, init?: ResponseInit) {
-  return new Response(JSON.stringify(data), {
-    headers: { "content-type": "application/json" },
-    ...init,
-  });
-}
-
-function unauthorized() {
-  return json({ error: "unauthorized" }, { status: 401 });
-}
-
-function html(data: string, init?: ResponseInit) {
-  return new Response(data, {
-    headers: { "content-type": "text/html; charset=utf-8" },
-    ...init,
-  });
-}
-
-async function parseJson<T>(request: Request) {
-  const text = await request.text();
-  if (!text) return {} as T;
-  return JSON.parse(text) as T;
-}
-
-function getBearerToken(request: Request) {
-  const h = request.headers.get("authorization") || "";
-  if (h.toLowerCase().startsWith("bearer ")) return h.slice(7).trim();
-  return null;
-}
-
-async function requireAuth(request: Request, env: Env) {
-  const url = new URL(request.url);
-  const bearer = getBearerToken(request);
-  const token = bearer || url.searchParams.get("token");
-  if (!token) return false;
-  return token === env.API_TOKEN;
-}
-
-async function getSubs(env: Env): Promise<Subscription[]> {
-  const raw = await env.SUBSCRIPTIONS_KV.get("subs:list");
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw) as Subscription[];
-  } catch {
-    return [];
-  }
-}
-
-async function saveSubs(env: Env, subs: Subscription[]) {
-  await env.SUBSCRIPTIONS_KV.put("subs:list", JSON.stringify(subs));
-}
-
-function daysUntil(dateStr: string) {
-  const now = new Date();
-  const d = new Date(dateStr + "T00:00:00Z");
-  const ms = d.getTime() - Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return Math.floor(ms / 86400000);
-}
-
-async function getAccessToken(env: Env, appid?: string, secret?: string) {
-  const useKV = env.WXPUSH_KV;
-  if (useKV) {
-    const cached = await useKV.get("wx_access_token");
-    if (cached) return cached;
-  }
-  const a = appid || env.WX_APPID;
-  const s = secret || env.WX_SECRET;
-  const r = await fetch(
-    `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${encodeURIComponent(a)}&secret=${encodeURIComponent(s)}`
-  );
-  const j = await r.json();
-  const token = j.access_token as string;
-  const ttl = typeof j.expires_in === "number" ? Math.max(1, j.expires_in - 300) : 7000;
-  if (env.WXPUSH_KV && token) {
-    await env.WXPUSH_KV.put("wx_access_token", token, { expirationTtl: ttl });
-  }
-  return token;
-}
-
-async function sendWeChat(env: Env, title: string, content: string, opts?: {
-  userid?: string;
-  template_id?: string;
-  url?: string;
-  appid?: string;
-  secret?: string;
-}) {
-  const token = await getAccessToken(env, opts?.appid, opts?.secret);
-  const users = (opts?.userid || env.WX_USERID).split("|").map(s => s.trim()).filter(Boolean);
-  const templateId = opts?.template_id || env.WX_TEMPLATE_ID;
-  const results: { user: string; ok: boolean; status: number; body?: unknown }[] = [];
-  for (const u of users) {
-    const payload = {
-      touser: u,
-      template_id: templateId,
-      url: opts?.url || "",
-      data: {
-        first: { value: title },
-        remark: { value: content }
-      }
-    };
-    const res = await fetch(`https://api.weixin.qq.com/cgi-bin/message/template/send?access_token=${encodeURIComponent(token)}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    const body = await res.json().catch(() => ({}));
-    const ok = res.ok && (body.errcode === 0 || body.errmsg === "ok");
-    results.push({ user: u, ok, status: res.status, body });
-  }
-  return results;
-}
-
-async function handleWxSend(request: Request, env: Env) {
-  const authed = await requireAuth(request, env);
-  if (!authed) return unauthorized();
-  const body = await parseJson<{
-    token?: string;
-    title: string;
-    content: string;
-    userid?: string;
-    template_id?: string;
-    url?: string;
-    appid?: string;
-    secret?: string;
-  }>(request);
-  if (!body.title || !body.content) return json({ error: "missing title or content" }, { status: 400 });
-  const results = await sendWeChat(env, body.title, body.content, {
-    userid: body.userid,
-    template_id: body.template_id,
-    url: body.url,
-    appid: body.appid,
-    secret: body.secret
-  });
-  return json({ results });
-}
-
-async function handleSubs(request: Request, env: Env) {
-  const authed = await requireAuth(request, env);
-  if (!authed) return unauthorized();
-  const url = new URL(request.url);
-  if (url.pathname === "/subs/bulk" && request.method === "POST") {
-    const bodyText = await request.text();
-    const parsed = bodyText ? JSON.parse(bodyText) : [];
-    const items: Partial<Subscription>[] = Array.isArray(parsed) ? parsed : (parsed.items || []);
-    const list = await getSubs(env);
-    for (const it of items) {
-      if (it.id) {
-        const idx = list.findIndex(s => s.id === it.id);
-        if (idx >= 0) {
-          list[idx] = { ...list[idx], ...it } as Subscription;
-        } else {
-          list.push({
-            id: it.id,
-            name: it.name || "",
-            expireDate: it.expireDate || "",
-            remindDays: it.remindDays ?? 0,
-            enabled: it.enabled ?? true,
-            remark: it.remark
-          });
-        }
-      } else {
-        list.push({
-          id: crypto.randomUUID(),
-          name: it.name || "",
-          expireDate: it.expireDate || "",
-          remindDays: it.remindDays ?? 0,
-          enabled: it.enabled ?? true,
-          remark: it.remark
-        });
-      }
-    }
-    await saveSubs(env, list);
-    return json({ ok: true, count: items.length });
-  }
-  if (request.method === "GET") {
-    const list = await getSubs(env);
-    return json({ list });
-  }
-  if (request.method === "POST") {
-    const payload = await parseJson<Partial<Subscription>>(request);
-    const list = await getSubs(env);
-    if (payload.id) {
-      const idx = list.findIndex(s => s.id === payload.id);
-      if (idx >= 0) {
-        const updated = { ...list[idx], ...payload } as Subscription;
-        list[idx] = updated;
-      } else {
-        const created: Subscription = {
-          id: payload.id,
-          name: payload.name || "",
-          expireDate: payload.expireDate || "",
-          remindDays: payload.remindDays ?? 0,
-          enabled: payload.enabled ?? true,
-          remark: payload.remark
-        };
-        list.push(created);
-      }
-    } else {
-      const created: Subscription = {
-        id: crypto.randomUUID(),
-        name: payload.name || "",
-        expireDate: payload.expireDate || "",
-        remindDays: payload.remindDays ?? 0,
-        enabled: payload.enabled ?? true,
-        remark: payload.remark
-      };
-      list.push(created);
-    }
-    await saveSubs(env, list);
-    return json({ ok: true });
-  }
-  if (request.method === "DELETE") {
-    const parts = url.pathname.split("/").filter(Boolean);
-    const id = parts[parts.length - 1];
-    if (!id) return json({ error: "missing id" }, { status: 400 });
-    const list = await getSubs(env);
-    const next = list.filter(s => s.id !== id);
-    await saveSubs(env, next);
-    return json({ ok: true });
-  }
-  return json({ error: "method not allowed" }, { status: 405 });
-}
-
-async function handleCheck(env: Env) {
-  const list = await getSubs(env);
-  const today = new Date();
-  const due = list.filter(s => s.enabled).filter(s => {
-    const d = daysUntil(s.expireDate);
-    return d >= 0 && d <= s.remindDays;
-  });
-  const results: unknown[] = [];
-  for (const s of due) {
-    const title = "订阅到期提醒";
-    const content = `名称: ${s.name}\n到期日期: ${s.expireDate}\n剩余天数: ${daysUntil(s.expireDate)}\n备注: ${s.remark || ""}`;
-    const r = await sendWeChat(env, title, content);
-    results.push({ id: s.id, name: s.name, notify: r });
-  }
-  return { count: due.length, results };
-}
+import { Env } from './types';
+import { adminPage } from './templates/admin';
+import { configPage } from './templates/config';
+import { loginPage } from './templates/login';
+import { handleDebugRequest } from './templates/debug';
+import { SubscriptionService } from './services/subscription';
+import { 
+  sendNotificationToAllChannels, 
+  sendTelegramNotification, 
+  sendNotifyXNotification, 
+  sendWeNotifyEdgeNotification,
+  sendWebhookNotification,
+  sendWechatBotNotification,
+  sendEmailNotification,
+  sendBarkNotification,
+  formatNotificationContent
+} from './services/notification';
+import { getConfig, generateRandomSecret } from './utils/config';
+import { generateJWT, verifyJWT } from './utils/auth';
+import { getCurrentTimeInTimezone, formatTimeInTimezone } from './utils/date';
+import { getCookieValue } from './utils/http';
 
 export default {
-  async fetch(request: Request, env: Env) {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
-    if (url.pathname === "/") {
-      const page = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>订阅管理</title><style>body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f5f7ff}h1{font-size:20px}input,select,textarea,button{font-size:14px;margin:4px}table{border-collapse:collapse;width:100%;margin-top:10px}th,td{border:1px solid #ddd;padding:8px;text-align:left}tr:nth-child(even){background:#f6f6f6}#status{margin:6px 0;color:#666}.container{max-width:960px;margin:24px auto;padding:16px}.card{background:#fff;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.08);padding:16px}.hidden{display:none}.login-wrap{display:flex;align-items:center;justify-content:center;height:100vh}.login-card{width:360px;background:#fff;border-radius:16px;box-shadow:0 12px 32px rgba(0,0,0,0.12);padding:24px;text-align:center}.brand{font-size:24px;font-weight:700;color:#5b6bff;margin-bottom:6px}.sub{color:#9aa0a6;margin-bottom:16px}.token-input{width:100%;padding:10px;border:1px solid #ddd;border-radius:8px}.primary{width:100%;padding:10px;background:#7a58ff;color:#fff;border:none;border-radius:8px;margin-top:12px;cursor:pointer}.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}</style></head><body><div id="login" class="login-wrap"><div class="login-card"><div class="brand">SubsTracker-wxpush</div><div class="sub">轻订阅系统管理</div><input id="loginToken" class="token-input" placeholder="请输入 Access Token"><button id="loginBtn" class="primary">进入系统</button><div id="loginStatus" style="margin-top:8px;color:#666"></div></div></div><div id="app" class="container hidden"><div class="card"><div class="topbar"><h1>订阅管理</h1><div><button id="logoutBtn">退出登录</button><span id="status" style="margin-left:8px"></span></div></div><div><h2>新增/更新订阅</h2><div><input id="id" placeholder="可选ID"><input id="name" placeholder="名称"><input id="expireDate" type="date"><input id="remindDays" type="number" placeholder="提前提醒天数"><label><input id="enabled" type="checkbox" checked>启用</label><input id="remark" placeholder="备注"><button id="addBtn">提交</button></div></div><div><h2>批量导入</h2><textarea id="bulk" rows="6" style="width:100%" placeholder='JSON数组或{ \"items\": [...] }'></textarea><button id="bulkBtn">批量提交</button></div><div><h2>订阅列表</h2><button id="refreshBtn">刷新</button><button id="checkBtn">到期检查并推送</button><table><thead><tr><th>ID</th><th>名称</th><th>到期</th><th>提前天数</th><th>启用</th><th>备注</th><th>操作</th></tr></thead><tbody id="tbody"></tbody></table></div></div></div><script>const login=document.getElementById("login");const app=document.getElementById("app");const loginInput=document.getElementById("loginToken");const loginBtn=document.getElementById("loginBtn");const loginStatus=document.getElementById("loginStatus");const sEl=document.getElementById("status");function getToken(){return localStorage.getItem("api_token")||""}function setToken(v){localStorage.setItem("api_token",v)}function showApp(){login.style.display="none";app.style.display="block"}function showLogin(){app.style.display="none";login.style.display="flex"}async function api(path,options){const token=getToken();const headers=Object.assign({},options&&options.headers||{},token?{Authorization:"Bearer "+token}:{}) ;const res=await fetch(path,Object.assign({},options,{headers}));const ct=res.headers.get("content-type")||"";if(ct.includes("application/json")){const j=await res.json();return {ok:res.ok,data:j}}else{const txt=await res.text();return {ok:res.ok,data:txt}}}async function tryLogin(v){if(!v){loginStatus.textContent="请输入 Token";return}setToken(v.trim());const r=await api("/health");if(r.ok&&r.data&&r.data.env&&r.data.env.API_TOKEN){loginStatus.textContent="登录成功";showApp();refresh()}else{loginStatus.textContent="Token 无效"}}loginBtn.onclick=()=>tryLogin(loginInput.value);document.getElementById("logoutBtn").onclick=()=>{localStorage.removeItem("api_token");location.reload()};if(getToken()){showApp()}else{showLogin()}async function refresh(){const r=await api("/subs");const tb=document.getElementById("tbody");tb.innerHTML="";if(!r.ok){sEl.textContent="列表失败";return}for(const it of r.data.list){const tr=document.createElement("tr");tr.innerHTML="<td>"+it.id+"</td><td>"+it.name+"</td><td>"+it.expireDate+"</td><td>"+it.remindDays+"</td><td>"+(it.enabled?"是":"否")+"</td><td>"+(it.remark||"")+"</td><td><button data-id='"+it.id+"' class='del'>删除</button><button data-id='"+it.id+"' class='toggle'>切换启用</button></td>";tb.appendChild(tr)}tb.querySelectorAll(".del").forEach(b=>b.onclick=async(e)=>{const id=e.target.getAttribute("data-id");const r=await api("/subs/"+id,{method:"DELETE"});if(r.ok)refresh()});tb.querySelectorAll(".toggle").forEach(b=>b.onclick=async(e)=>{const id=e.target.getAttribute("data-id");const r0=await api("/subs");const it=r0.ok?r0.data.list.find(x=>x.id===id):null;if(!it)return;it.enabled=!it.enabled;await api("/subs",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(it)});refresh()})}document.getElementById("refreshBtn").onclick=refresh;document.getElementById("addBtn").onclick=async()=>{const payload={id:document.getElementById("id").value.trim()||undefined,name:document.getElementById("name").value.trim(),expireDate:document.getElementById("expireDate").value,remindDays:parseInt(document.getElementById("remindDays").value||"0"),enabled:document.getElementById("enabled").checked,remark:document.getElementById("remark").value.trim()};const r=await api("/subs",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});sEl.textContent=r.ok?"提交成功":"提交失败";refresh()};document.getElementById("bulkBtn").onclick=async()=>{try{const text=document.getElementById("bulk").value;const parsed=text?JSON.parse(text):[];const r=await api("/subs/bulk",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(parsed)});sEl.textContent=r.ok?"批量成功":"批量失败";refresh()}catch(e){sEl.textContent="JSON 解析失败"}};document.getElementById("checkBtn").onclick=async()=>{const r=await api("/check",{method:"POST"});sEl.textContent=r.ok?"已触发到期检查":"触发失败"};if(getToken())refresh();</script></body></html>`;
-      return html(page);
+
+    // Debug page
+    if (url.pathname === '/debug') {
+      return handleDebugRequest(request, env);
     }
-    if (url.pathname === "/health") {
-      return json({
-        ok: true,
-        env: {
-          API_TOKEN: !!env.API_TOKEN,
-          WX_APPID: !!env.WX_APPID,
-          WX_SECRET: !!env.WX_SECRET,
-          WX_USERID: !!env.WX_USERID,
-          WX_TEMPLATE_ID: !!env.WX_TEMPLATE_ID,
-          SUBSCRIPTIONS_KV: !!env.SUBSCRIPTIONS_KV,
-          WXPUSH_KV: !!env.WXPUSH_KV
-        }
-      });
+
+    // API Routes
+    if (url.pathname.startsWith('/api')) {
+      return handleApiRequest(request, env);
     }
-    if (url.pathname.startsWith("/wxsend")) {
-      if (request.method === "GET") {
-        const authed = await requireAuth(request, env);
-        if (!authed) return unauthorized();
-        const title = url.searchParams.get("title") || "";
-        const content = url.searchParams.get("content") || "";
-        const userid = url.searchParams.get("userid") || undefined;
-        if (!title || !content) return json({ error: "missing title or content" }, { status: 400 });
-        const results = await sendWeChat(env, title, content, { userid });
-        return json({ results });
-      }
-      return handleWxSend(request, env);
+
+    // Admin Routes
+    if (url.pathname.startsWith('/admin')) {
+      return handleAdminRequest(request, env);
     }
-    if (url.pathname.startsWith("/subs")) {
-      return handleSubs(request, env);
-    }
-    if (url.pathname.startsWith("/check")) {
-      const authed = await requireAuth(request, env);
-      if (!authed) return unauthorized();
-      const r = await handleCheck(env);
-      return json(r);
-    }
-    return json({ error: "not found" }, { status: 404 });
+
+    // Default: Login or Redirect to Admin
+    return handleMainRequest(request, env);
   },
-  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(handleCheck(env));
+
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    const config = await getConfig(env);
+    const timezone = config?.TIMEZONE || 'UTC';
+    const currentTime = getCurrentTimeInTimezone(timezone);
+    console.log('[Workers] 定时任务触发 UTC:', new Date().toISOString(), timezone + ':', currentTime.toLocaleString('zh-CN', {timeZone: timezone}));
+    
+    const subscriptionService = new SubscriptionService(env);
+    const { notifications } = await subscriptionService.checkExpiringSubscriptions();
+    
+    if (notifications.length > 0) {
+      // 按到期时间排序
+      notifications.sort((a, b) => a.daysUntil - b.daysUntil);
+      
+      const subscriptions = notifications.map(n => ({
+        ...n.subscription,
+        daysRemaining: n.daysUntil
+      }));
+
+      const commonContent = formatNotificationContent(subscriptions, config);
+      const title = '订阅到期提醒';
+      await sendNotificationToAllChannels(title, commonContent, config, '[定时任务]');
+    }
   }
 };
+
+async function handleMainRequest(request: Request, env: Env): Promise<Response> {
+  return new Response(loginPage, {
+    headers: { 'Content-Type': 'text/html; charset=utf-8' }
+  });
+}
+
+async function handleAdminRequest(request: Request, env: Env): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const token = getCookieValue(request.headers.get('Cookie'), 'token');
+    const config = await getConfig(env);
+    const user = token ? await verifyJWT(token, config.JWT_SECRET) : null;
+
+    if (!user) {
+      return new Response('', {
+        status: 302,
+        headers: { 'Location': '/' }
+      });
+    }
+
+    if (url.pathname === '/admin/config') {
+      return new Response(configPage, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' }
+      });
+    }
+
+    return new Response(adminPage, {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' }
+    });
+  } catch (error) {
+    console.error('[Admin] Error:', error);
+    return new Response('Internal Server Error', { status: 500 });
+  }
+}
+
+async function handleApiRequest(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const path = url.pathname.slice(4); // Remove '/api'
+  const method = request.method;
+  const config = await getConfig(env);
+
+  // Public API: Login
+  if (path === '/login' && method === 'POST') {
+    try {
+      const body: any = await request.json();
+      if (body.username === config.ADMIN_USERNAME && body.password === config.ADMIN_PASSWORD) {
+        const token = await generateJWT(body.username, config.JWT_SECRET);
+        return new Response(JSON.stringify({ success: true }), {
+          headers: {
+            'Content-Type': 'application/json',
+            'Set-Cookie': `token=${token}; HttpOnly; Path=/; SameSite=Strict; Max-Age=86400`
+          }
+        });
+      } else {
+        return new Response(JSON.stringify({ success: false, message: '用户名或密码错误' }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    } catch (e) {
+      return new Response(JSON.stringify({ success: false, message: 'Invalid request' }), { status: 400 });
+    }
+  }
+
+  // Public API: Logout
+  if (path === '/logout' && (method === 'GET' || method === 'POST')) {
+    return new Response('', {
+      status: 302,
+      headers: {
+        'Location': '/',
+        'Set-Cookie': 'token=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0'
+      }
+    });
+  }
+  
+  // Third-party Notification API (Public)
+  if (path.startsWith('/notify/')) {
+      // ... implementation ...
+      // reusing existing logic structure
+      if (method === 'POST') {
+        try {
+          const body: any = await request.json();
+          const title = body.title || '第三方通知';
+          const content = body.content || '';
+
+          if (!content) {
+            return new Response(JSON.stringify({ message: '缺少必填参数 content' }), { status: 400 });
+          }
+
+          await sendNotificationToAllChannels(title, content, config, '[第三方API]');
+
+          return new Response(JSON.stringify({
+              message: '发送成功',
+              response: { errcode: 0, errmsg: 'ok', msgid: 'MSGID' + Date.now() }
+            }), { headers: { 'Content-Type': 'application/json' } });
+        } catch (error: any) {
+          return new Response(JSON.stringify({
+              message: '发送失败',
+              response: { errcode: 1, errmsg: error.message }
+            }), { status: 500 });
+        }
+      }
+  }
+
+  // Auth Check for other APIs
+  const token = getCookieValue(request.headers.get('Cookie'), 'token');
+  const user = token ? await verifyJWT(token, config.JWT_SECRET) : null;
+
+  if (!user) {
+    return new Response(JSON.stringify({ success: false, message: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  // Config API
+  if (path === '/config') {
+    if (method === 'GET') {
+      const { JWT_SECRET, ADMIN_PASSWORD, ...safeConfig } = config;
+      return new Response(JSON.stringify(safeConfig), { headers: { 'Content-Type': 'application/json' } });
+    }
+    if (method === 'POST') {
+      try {
+        const newConfig: any = await request.json();
+        const updatedConfig = {
+            ...config,
+            ADMIN_USERNAME: newConfig.ADMIN_USERNAME || config.ADMIN_USERNAME,
+            TG_BOT_TOKEN: newConfig.TG_BOT_TOKEN || '',
+            TG_CHAT_ID: newConfig.TG_CHAT_ID || '',
+            NOTIFYX_API_KEY: newConfig.NOTIFYX_API_KEY || '',
+            WENOTIFY_URL: newConfig.WENOTIFY_URL || '',
+            WENOTIFY_TOKEN: newConfig.WENOTIFY_TOKEN || '',
+            WENOTIFY_USERID: newConfig.WENOTIFY_USERID || '',
+            WENOTIFY_TEMPLATE_ID: newConfig.WENOTIFY_TEMPLATE_ID || '',
+            WEBHOOK_URL: newConfig.WEBHOOK_URL || '',
+            WEBHOOK_METHOD: newConfig.WEBHOOK_METHOD || 'POST',
+            WEBHOOK_HEADERS: newConfig.WEBHOOK_HEADERS || '',
+            WEBHOOK_TEMPLATE: newConfig.WEBHOOK_TEMPLATE || '',
+            SHOW_LUNAR: newConfig.SHOW_LUNAR === true,
+            WECHATBOT_WEBHOOK: newConfig.WECHATBOT_WEBHOOK || '',
+            WECHATBOT_MSG_TYPE: newConfig.WECHATBOT_MSG_TYPE || 'text',
+            WECHATBOT_AT_MOBILES: newConfig.WECHATBOT_AT_MOBILES || '',
+            WECHATBOT_AT_ALL: newConfig.WECHATBOT_AT_ALL || 'false',
+            RESEND_API_KEY: newConfig.RESEND_API_KEY || '',
+            EMAIL_FROM: newConfig.EMAIL_FROM || '',
+            EMAIL_FROM_NAME: newConfig.EMAIL_FROM_NAME || '',
+            EMAIL_TO: newConfig.EMAIL_TO || '',
+            BARK_DEVICE_KEY: newConfig.BARK_DEVICE_KEY || '',
+            BARK_SERVER: newConfig.BARK_SERVER || 'https://api.day.app',
+            BARK_IS_ARCHIVE: newConfig.BARK_IS_ARCHIVE || 'false',
+            ENABLED_NOTIFIERS: newConfig.ENABLED_NOTIFIERS || ['notifyx'],
+            TIMEZONE: newConfig.TIMEZONE || config.TIMEZONE || 'UTC'
+        };
+        
+        if (newConfig.ADMIN_PASSWORD) {
+            updatedConfig.ADMIN_PASSWORD = newConfig.ADMIN_PASSWORD;
+        }
+
+        if (!updatedConfig.JWT_SECRET || updatedConfig.JWT_SECRET === 'your-secret-key') {
+            updatedConfig.JWT_SECRET = generateRandomSecret();
+        }
+
+        await env.SUBSCRIPTIONS_KV.put('config', JSON.stringify(updatedConfig));
+        return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+      } catch (error: any) {
+        return new Response(JSON.stringify({ success: false, message: error.message }), { status: 400 });
+      }
+    }
+  }
+
+  // Test Notification API
+  if (path === '/test-notification' && method === 'POST') {
+    try {
+        const body: any = await request.json();
+        let success = false;
+        let message = '';
+        
+        // Mock config for test
+        const testConfig = { ...config, ...body }; 
+        // Note: body contains specific fields like TG_BOT_TOKEN which overlay on config.
+        // The original code manually mapped fields. Here we can be a bit more dynamic or strict.
+        // Let's stick to strict mapping as per original to avoid pollution if needed, 
+        // but spreading body over config is easier if field names match.
+        // The original code constructed `testConfig` manually for each type.
+        
+        if (body.type === 'telegram') {
+            const content = '*测试通知*\n\n这是一条测试通知...';
+            success = await sendTelegramNotification(content, { ...config, TG_BOT_TOKEN: body.TG_BOT_TOKEN, TG_CHAT_ID: body.TG_CHAT_ID });
+        } else if (body.type === 'notifyx') {
+            success = await sendNotifyXNotification('测试通知', '## 测试通知...', '测试描述', { ...config, NOTIFYX_API_KEY: body.NOTIFYX_API_KEY });
+        } else if (body.type === 'wenotify') {
+            success = await sendWeNotifyEdgeNotification('测试通知', '测试通知...', { ...config, WENOTIFY_URL: body.WENOTIFY_URL, WENOTIFY_TOKEN: body.WENOTIFY_TOKEN, WENOTIFY_USERID: body.WENOTIFY_USERID, WENOTIFY_TEMPLATE_ID: body.WENOTIFY_TEMPLATE_ID });
+        } else if (body.type === 'webhook') {
+            success = await sendWebhookNotification('测试通知', '测试通知...', { ...config, WEBHOOK_URL: body.WEBHOOK_URL, WEBHOOK_METHOD: body.WEBHOOK_METHOD, WEBHOOK_HEADERS: body.WEBHOOK_HEADERS, WEBHOOK_TEMPLATE: body.WEBHOOK_TEMPLATE });
+        } else if (body.type === 'wechatbot') {
+            success = await sendWechatBotNotification('测试通知', '测试通知...', { ...config, WECHATBOT_WEBHOOK: body.WECHATBOT_WEBHOOK, WECHATBOT_MSG_TYPE: body.WECHATBOT_MSG_TYPE, WECHATBOT_AT_MOBILES: body.WECHATBOT_AT_MOBILES, WECHATBOT_AT_ALL: body.WECHATBOT_AT_ALL });
+        } else if (body.type === 'email') {
+            success = await sendEmailNotification('测试通知', '测试通知...', { ...config, RESEND_API_KEY: body.RESEND_API_KEY, EMAIL_FROM: body.EMAIL_FROM, EMAIL_FROM_NAME: body.EMAIL_FROM_NAME, EMAIL_TO: body.EMAIL_TO });
+        } else if (body.type === 'bark') {
+            success = await sendBarkNotification('测试通知', '测试通知...', { ...config, BARK_SERVER: body.BARK_SERVER, BARK_DEVICE_KEY: body.BARK_DEVICE_KEY, BARK_IS_ARCHIVE: body.BARK_IS_ARCHIVE });
+        }
+        
+        return new Response(JSON.stringify({ success, message: success ? '发送成功' : '发送失败' }), { headers: { 'Content-Type': 'application/json' } });
+    } catch (error: any) {
+        return new Response(JSON.stringify({ success: false, message: error.message }), { status: 500 });
+    }
+  }
+
+  // Subscriptions API
+  const subscriptionService = new SubscriptionService(env);
+  
+  if (path === '/subscriptions') {
+    if (method === 'GET') {
+      const subscriptions = await subscriptionService.getAllSubscriptions();
+      return new Response(JSON.stringify(subscriptions), { headers: { 'Content-Type': 'application/json' } });
+    }
+    if (method === 'POST') {
+      const sub = await request.json();
+      const result = await subscriptionService.createSubscription(sub as any);
+      return new Response(JSON.stringify(result), { status: result.success ? 201 : 400, headers: { 'Content-Type': 'application/json' } });
+    }
+  }
+
+  if (path.startsWith('/subscriptions/')) {
+    const parts = path.split('/');
+    const id = parts[2];
+
+    if (parts[3] === 'toggle-status' && method === 'POST') {
+      const body: any = await request.json();
+      const result = await subscriptionService.toggleSubscriptionStatus(id, body.isActive);
+      return new Response(JSON.stringify(result), { status: result.success ? 200 : 400, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (parts[3] === 'test-notify' && method === 'POST') {
+      // Implement test notify for single subscription
+      try {
+        const sub = await subscriptionService.getSubscription(id);
+        if (!sub) return new Response(JSON.stringify({ success: false, message: 'Subscription not found' }), { status: 404 });
+        
+        // Calculate days remaining roughly
+        const now = new Date();
+        const expiry = new Date(sub.expiryDate);
+        // Note: exact calculation logic is in checkExpiringSubscriptions but we can approximate or duplicate for display
+        sub.daysRemaining = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        
+        const content = formatNotificationContent([sub], config);
+        await sendNotificationToAllChannels('订阅提醒测试', content, config, '[手动测试]');
+        return new Response(JSON.stringify({ success: true, message: '已发送' }), { headers: { 'Content-Type': 'application/json' } });
+      } catch (e: any) {
+        return new Response(JSON.stringify({ success: false, message: e.message }), { status: 500 });
+      }
+    }
+
+    if (method === 'GET') {
+      const sub = await subscriptionService.getSubscription(id);
+      return new Response(JSON.stringify(sub), { headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (method === 'PUT') {
+      const sub = await request.json();
+      const result = await subscriptionService.updateSubscription(id, sub as any);
+      return new Response(JSON.stringify(result), { status: result.success ? 200 : 400, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (method === 'DELETE') {
+      const result = await subscriptionService.deleteSubscription(id);
+      return new Response(JSON.stringify(result), { status: result.success ? 200 : 400, headers: { 'Content-Type': 'application/json' } });
+    }
+  }
+
+  return new Response(JSON.stringify({ success: false, message: 'Not Found' }), { status: 404 });
+}
