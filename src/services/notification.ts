@@ -225,9 +225,17 @@ export async function sendWeNotifyEdgeNotification(title: string, content: strin
       url = base.endsWith('/wxsend') ? base : base + '/wxsend';
     }
 
+    // 兼容 WeNotify-Edge 的 getParams 逻辑：
+    // 它只从 URL 参数或 Body 中读取参数，不检查 Authorization Header
+    // 因此我们需要把 Token 拼接到 URL 中，或者放入 Body 中
+    const tokenStr = config.wenotify.token.trim();
+    const separator = url.includes('?') ? '&' : '?';
+    url += `${separator}token=${encodeURIComponent(tokenStr)}`;
+
     const body: any = {
       title: title,
-      content: content
+      content: content,
+      token: tokenStr // 双重保险：同时放入 Body
     };
     if (config.wenotify.userid) {
       body.userid = config.wenotify.userid;
@@ -239,7 +247,8 @@ export async function sendWeNotifyEdgeNotification(title: string, content: strin
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': config.wenotify.token.trim()
+        // 依然保留 Authorization Header 以防万一
+        'Authorization': tokenStr
       },
       body: JSON.stringify(body)
     }, 2, 8000);
