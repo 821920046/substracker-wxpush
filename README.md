@@ -15,6 +15,19 @@
 - **自动任务**：利用 Cloudflare Workers Cron Triggers 每日自动检查并推送提醒。
 - **安全鉴权**：基于 JWT 的登录认证系统。
 
+## 🆕 最近更新
+
+- 仪表盘升级为动态“仪表板状态”，四项卡片支持仪表显示与动画
+- 新增“金额（每周期，¥）”字段；仪表盘新增“本月预估支出”，按订阅周期换算月度支出
+- 本月预估支出计算规则：
+  - 月周期：月支出 = 价格 ÷ 周期数值
+  - 年周期：月支出 = 价格 ÷ (12 × 周期数值)
+  - 天周期：月支出 ≈ 价格 × (30 ÷ 周期数值)
+- 管理页支持单订阅“测试通知”按钮，便于渠道联调
+- 默认管理员凭据更新为 `admin / password`，并提供本地预览重置接口 `/api/dev/reset-login`
+- KV 与部署命令适配 Wrangler v4 语法（示例见下方）
+- 订阅自动续期与到期计算的稳定性改进；UI 日历完善农历展示
+
 ## 📂 目录结构
 
 ```
@@ -41,7 +54,8 @@ src/
 ```toml
 name = "subscription-manager"
 main = "src/worker.ts"
-compatibility_date = "2023-10-30"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
 
 [[kv_namespaces]]
 # 替换为你的 KV ID
@@ -49,13 +63,13 @@ binding = "SUBSCRIPTIONS_KV"
 id = "your-kv-id-here"
 
 [triggers]
-crons = ["0 0 * * *"] # 每日 UTC 0点 (北京时间 8点) 执行
+crons = ["0 8 * * *"] # 每日北京时间早上8点执行
 ```
 
 ### 3. 创建 KV Namespace
 
 ```bash
-wrangler kv:namespace create SUBSCRIPTIONS_KV
+wrangler kv namespace create SUBSCRIPTIONS_KV
 # 将输出的 ID 填入 wrangler.toml
 ```
 
@@ -71,7 +85,7 @@ wrangler deploy
 1. **初始登录**：
    - 访问部署后的 Worker 域名。
    - 默认账号：`admin`
-   - 默认密码：`admin`
+   - 默认密码：`password`
 
 2. **系统配置**：
    - 登录后点击导航栏的 **"系统配置"**。
@@ -87,14 +101,15 @@ wrangler deploy
 4. **调试**：
    - 访问 `/debug` 路径可查看系统环境与 KV 连接状态。
 
+5. **本地重置登录（仅限预览环境）**：
+   - 在本地预览（localhost/127.0.0.1）下可调用：`POST /api/dev/reset-login`
+   - 重置为：用户名 `admin`，密码 `password`，并生成缺失的 JWT 密钥
+
 ## 🛠️ 开发与构建
 
 ```bash
-# 本地开发服务器
-npm run start
-
-# 类型检查
-npm run type-check
+# 本地开发预览
+npx wrangler dev
 ```
 
 ## 📝 环境变量说明
