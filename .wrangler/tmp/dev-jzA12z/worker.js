@@ -2720,7 +2720,7 @@ var SubscriptionService = class {
         }
       }
       const newSubscription = {
-        id: Date.now().toString(),
+        id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : Date.now().toString(),
         name: subscription.name,
         customType: subscription.customType || "",
         startDate: subscription.startDate || null,
@@ -2913,6 +2913,32 @@ var SubscriptionService = class {
   }
 };
 
+// src/utils/http.ts
+function getCookieValue(cookieString, key) {
+  if (!cookieString) return null;
+  const match = cookieString.match(new RegExp("(^| )" + key + "=([^;]+)"));
+  return match ? match[2] : null;
+}
+__name(getCookieValue, "getCookieValue");
+async function requestWithRetry(url, options, retries = 1, timeoutMs = 8e3) {
+  let lastError = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const resp = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timer);
+      if (resp.ok || attempt === retries) return resp;
+      lastError = new Error("Request failed");
+    } catch (e) {
+      clearTimeout(timer);
+      lastError = e;
+    }
+  }
+  throw lastError;
+}
+__name(requestWithRetry, "requestWithRetry");
+
 // src/services/notification.ts
 function formatNotificationContent(subscriptions, config) {
   const showLunar = config.showLunarGlobal === true;
@@ -3012,7 +3038,7 @@ async function sendTelegramNotification(message, config) {
       return false;
     }
     const url = "https://api.telegram.org/bot" + config.telegram.botToken + "/sendMessage";
-    const response = await fetch(url, {
+    const response = await requestWithRetry(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -3020,7 +3046,7 @@ async function sendTelegramNotification(message, config) {
         text: message,
         parse_mode: "Markdown"
       })
-    });
+    }, 2, 8e3);
     const result = await response.json();
     return result.ok;
   } catch (error) {
@@ -3036,7 +3062,7 @@ async function sendNotifyXNotification(title, content, description, config) {
       return false;
     }
     const url = "https://www.notifyx.cn/api/v1/send/" + config.notifyx.apiKey;
-    const response = await fetch(url, {
+    const response = await requestWithRetry(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -3044,7 +3070,7 @@ async function sendNotifyXNotification(title, content, description, config) {
         content,
         description: description || ""
       })
-    });
+    }, 2, 8e3);
     const result = await response.json();
     return result.status === "queued";
   } catch (error) {
@@ -3071,14 +3097,14 @@ async function sendWeNotifyEdgeNotification(title, content, config) {
     if (config.wenotify.templateId) {
       body.template_id = config.wenotify.templateId;
     }
-    const response = await fetch(url, {
+    const response = await requestWithRetry(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": "Bearer " + config.wenotify.token
       },
       body: JSON.stringify(body)
-    });
+    }, 2, 8e3);
     return response.ok;
   } catch (error) {
     console.error("[WeNotify Edge] \u53D1\u9001\u901A\u77E5\u5931\u8D25:", error);
@@ -3102,13 +3128,13 @@ async function sendBarkNotification(title, content, config) {
     if (config.bark.isArchive === "true") {
       payload.isArchive = 1;
     }
-    const response = await fetch(url, {
+    const response = await requestWithRetry(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json; charset=utf-8"
       },
       body: JSON.stringify(payload)
-    });
+    }, 2, 8e3);
     const result = await response.json();
     return result.code === 200;
   } catch (error) {
@@ -3160,7 +3186,7 @@ async function sendEmailNotification(title, content, config) {
 </body>
 </html>`;
     const fromEmail = config.email.fromEmail.includes("<") ? config.email.fromEmail : config.email.fromEmail ? `Notification <${config.email.fromEmail}>` : "";
-    const response = await fetch("https://api.resend.com/emails", {
+    const response = await requestWithRetry("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${config.email.resendApiKey}`,
@@ -3173,7 +3199,7 @@ async function sendEmailNotification(title, content, config) {
         html: htmlContent,
         text: content
       })
-    });
+    }, 1, 1e4);
     const result = await response.json();
     return response.ok && result.id;
   } catch (error) {
@@ -3206,11 +3232,11 @@ ${content}`
         }
       });
     }
-    const response = await fetch(config.webhook.url, {
+    const response = await requestWithRetry(config.webhook.url, {
       method,
       headers,
       body: method !== "GET" ? body : void 0
-    });
+    }, 2, 8e3);
     return response.ok;
   } catch (error) {
     console.error("[\u4F01\u4E1A\u5FAE\u4FE1\u5E94\u7528\u901A\u77E5] \u53D1\u9001\u5931\u8D25:", error);
@@ -3259,13 +3285,13 @@ ${content}`;
         }
       }
     }
-    const response = await fetch(config.wechatBot.webhook, {
+    const response = await requestWithRetry(config.wechatBot.webhook, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
       body: JSON.stringify(messageData)
-    });
+    }, 2, 8e3);
     const responseText = await response.text();
     if (response.ok) {
       try {
@@ -3283,14 +3309,6 @@ ${content}`;
   }
 }
 __name(sendWechatBotNotification, "sendWechatBotNotification");
-
-// src/utils/http.ts
-function getCookieValue(cookieString, key) {
-  if (!cookieString) return null;
-  const match = cookieString.match(new RegExp("(^| )" + key + "=([^;]+)"));
-  return match ? match[2] : null;
-}
-__name(getCookieValue, "getCookieValue");
 
 // src/worker.ts
 var worker_default = {
@@ -3363,6 +3381,18 @@ async function handleApiRequest(request, env) {
   const path = url.pathname.slice(4);
   const method = request.method;
   const config = await getConfig(env);
+  const ip = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "unknown";
+  async function isRateLimited(base, limit) {
+    const bucket = Math.floor(Date.now() / 6e4);
+    const key = `rate:${base}:${ip}:${bucket}`;
+    const val = await env.SUBSCRIPTIONS_KV.get(key);
+    let count = 0;
+    if (val) count = parseInt(val) || 0;
+    count++;
+    await env.SUBSCRIPTIONS_KV.put(key, String(count));
+    return count > limit;
+  }
+  __name(isRateLimited, "isRateLimited");
   if (path === "/dev/reset-login" && method === "POST") {
     try {
       const url2 = new URL(request.url);
@@ -3384,6 +3414,9 @@ async function handleApiRequest(request, env) {
   }
   if (path === "/login" && method === "POST") {
     try {
+      if (await isRateLimited("login", 10)) {
+        return new Response(JSON.stringify({ success: false, message: "\u8BF7\u6C42\u8FC7\u4E8E\u9891\u7E41" }), { status: 429, headers: { "Content-Type": "application/json" } });
+      }
       const body = await request.json();
       const expectedUser = config.adminUsername || "admin";
       const expectedPass = config.adminPassword || "password";
@@ -3392,10 +3425,12 @@ async function handleApiRequest(request, env) {
       const ok = inputUser === expectedUser && inputPass === expectedPass;
       if (ok) {
         const token2 = await generateJWT(body.username, config.jwtSecret);
+        const isLocal = url.hostname === "127.0.0.1" || url.hostname === "localhost";
+        const secureFlag = isLocal ? "" : "; Secure";
         return new Response(JSON.stringify({ success: true }), {
           headers: {
             "Content-Type": "application/json",
-            "Set-Cookie": `token=${token2}; HttpOnly; Path=/; SameSite=Strict; Max-Age=86400`
+            "Set-Cookie": `token=${token2}; HttpOnly; Path=/; SameSite=Strict; Max-Age=86400${secureFlag}`
           }
         });
       } else {
@@ -3408,17 +3443,28 @@ async function handleApiRequest(request, env) {
     }
   }
   if (path === "/logout" && (method === "GET" || method === "POST")) {
+    const isLocal = url.hostname === "127.0.0.1" || url.hostname === "localhost";
+    const secureFlag = isLocal ? "" : "; Secure";
     return new Response("", {
       status: 302,
       headers: {
         "Location": "/",
-        "Set-Cookie": "token=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0"
+        "Set-Cookie": `token=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0${secureFlag}`
       }
     });
   }
   if (path.startsWith("/notify/")) {
     if (method === "POST") {
       try {
+        if (await isRateLimited("notify", 20)) {
+          return new Response(JSON.stringify({ message: "\u8BF7\u6C42\u8FC7\u4E8E\u9891\u7E41" }), { status: 429, headers: { "Content-Type": "application/json" } });
+        }
+        const tokenHeader = request.headers.get("X-Notify-Token") || "";
+        const tokenQuery = url.searchParams.get("token") || "";
+        const providedToken = tokenHeader || tokenQuery;
+        if (!providedToken || providedToken !== (config.jwtSecret || "")) {
+          return new Response(JSON.stringify({ message: "Unauthorized" }), { status: 403, headers: { "Content-Type": "application/json" } });
+        }
         const body = await request.json();
         const title = body.title || "\u7B2C\u4E09\u65B9\u901A\u77E5";
         const content = body.content || "";

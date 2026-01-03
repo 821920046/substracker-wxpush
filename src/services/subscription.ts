@@ -66,7 +66,7 @@ export class SubscriptionService {
       }
 
       const newSubscription: Subscription = {
-        id: Date.now().toString(),
+        id: (typeof crypto !== 'undefined' && 'randomUUID' in crypto) ? crypto.randomUUID() : Date.now().toString(),
         name: subscription.name,
         customType: subscription.customType || '',
         startDate: subscription.startDate || null,

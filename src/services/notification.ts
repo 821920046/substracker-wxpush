@@ -2,6 +2,7 @@
 import { Env, ChannelConfig, Subscription, Config } from '../types';
 import { formatTimeInTimezone, formatTimezoneDisplay } from '../utils/date';
 import { lunarCalendar } from '../utils/lunar';
+import { requestWithRetry } from '../utils/http';
 
 /**
  * 格式化通知内容
@@ -125,7 +126,7 @@ export async function sendTelegramNotification(message: string, config: Config):
     }
 
     const url = 'https://api.telegram.org/bot' + config.telegram.botToken + '/sendMessage';
-    const response = await fetch(url, {
+    const response = await requestWithRetry(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -133,7 +134,7 @@ export async function sendTelegramNotification(message: string, config: Config):
         text: message,
         parse_mode: 'Markdown'
       })
-    });
+    }, 2, 8000);
 
     const result = await response.json() as any;
     return result.ok;
@@ -152,7 +153,7 @@ export async function sendNotifyXNotification(title: string, content: string, de
     }
 
     const url = 'https://www.notifyx.cn/api/v1/send/' + config.notifyx.apiKey;
-    const response = await fetch(url, {
+    const response = await requestWithRetry(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -160,7 +161,7 @@ export async function sendNotifyXNotification(title: string, content: string, de
         content: content,
         description: description || ''
       })
-    });
+    }, 2, 8000);
 
     const result = await response.json() as any;
     return result.status === 'queued';
@@ -189,14 +190,14 @@ export async function sendWeNotifyEdgeNotification(title: string, content: strin
     if (config.wenotify.templateId) {
       body.template_id = config.wenotify.templateId;
     }
-    const response = await fetch(url, {
+    const response = await requestWithRetry(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + config.wenotify.token
       },
       body: JSON.stringify(body)
-    });
+    }, 2, 8000);
     return response.ok;
   } catch (error) {
     console.error('[WeNotify Edge] 发送通知失败:', error);
@@ -224,13 +225,13 @@ export async function sendBarkNotification(title: string, content: string, confi
       payload.isArchive = 1;
     }
 
-    const response = await fetch(url, {
+    const response = await requestWithRetry(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json; charset=utf-8'
       },
       body: JSON.stringify(payload)
-    });
+    }, 2, 8000);
 
     const result = await response.json() as any;
     return result.code === 200;
@@ -290,7 +291,7 @@ export async function sendEmailNotification(title: string, content: string, conf
       config.email.fromEmail :
       (config.email.fromEmail ? `Notification <${config.email.fromEmail}>` : '');
 
-    const response = await fetch('https://api.resend.com/emails', {
+    const response = await requestWithRetry('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${config.email.resendApiKey}`,
@@ -303,7 +304,7 @@ export async function sendEmailNotification(title: string, content: string, conf
         html: htmlContent,
         text: content
       })
-    });
+    }, 1, 10000);
 
     const result = await response.json() as any;
     return response.ok && result.id;
@@ -344,11 +345,11 @@ export async function sendWebhookNotification(title: string, content: string, co
       });
     }
 
-    const response = await fetch(config.webhook.url, {
+    const response = await requestWithRetry(config.webhook.url, {
       method: method,
       headers: headers,
       body: method !== 'GET' ? body : undefined
-    });
+    }, 2, 8000);
 
     return response.ok;
   } catch (error) {
@@ -399,13 +400,13 @@ export async function sendWechatBotNotification(title: string, content: string, 
       }
     }
 
-    const response = await fetch(config.wechatBot.webhook, {
+    const response = await requestWithRetry(config.wechatBot.webhook, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(messageData)
-    });
+    }, 2, 8000);
 
     const responseText = await response.text();
     if (response.ok) {

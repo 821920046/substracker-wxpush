@@ -108,6 +108,18 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
   const path = url.pathname.slice(4); // Remove '/api'
   const method = request.method;
   const config = await getConfig(env);
+  const ip = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'unknown';
+
+  async function isRateLimited(base: string, limit: number): Promise<boolean> {
+    const bucket = Math.floor(Date.now() / 60000);
+    const key = `rate:${base}:${ip}:${bucket}`;
+    const val = await env.SUBSCRIPTIONS_KV.get(key);
+    let count = 0;
+    if (val) count = parseInt(val) || 0;
+    count++;
+    await env.SUBSCRIPTIONS_KV.put(key, String(count));
+    return count > limit;
+  }
 
   if (path === '/dev/reset-login' && method === 'POST') {
     try {
@@ -132,6 +144,9 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
   // Public API: Login
   if (path === '/login' && method === 'POST') {
     try {
+      if (await isRateLimited('login', 10)) {
+        return new Response(JSON.stringify({ success: false, message: '请求过于频繁' }), { status: 429, headers: { 'Content-Type': 'application/json' } });
+      }
       const body: any = await request.json();
       const expectedUser = config.adminUsername || 'admin';
       const expectedPass = config.adminPassword || 'password';
@@ -140,10 +155,12 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       const ok = inputUser === expectedUser && inputPass === expectedPass;
       if (ok) {
         const token = await generateJWT(body.username, config.jwtSecret!);
+        const isLocal = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+        const secureFlag = isLocal ? '' : '; Secure';
         return new Response(JSON.stringify({ success: true }), {
           headers: {
             'Content-Type': 'application/json',
-            'Set-Cookie': `token=${token}; HttpOnly; Path=/; SameSite=Strict; Max-Age=86400`
+            'Set-Cookie': `token=${token}; HttpOnly; Path=/; SameSite=Strict; Max-Age=86400${secureFlag}`
           }
         });
       } else {
@@ -158,11 +175,13 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
 
   // Public API: Logout
   if (path === '/logout' && (method === 'GET' || method === 'POST')) {
+    const isLocal = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+    const secureFlag = isLocal ? '' : '; Secure';
     return new Response('', {
       status: 302,
       headers: {
         'Location': '/',
-        'Set-Cookie': 'token=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0'
+        'Set-Cookie': `token=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0${secureFlag}`
       }
     });
   }
@@ -173,6 +192,15 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       // reusing existing logic structure
       if (method === 'POST') {
         try {
+          if (await isRateLimited('notify', 20)) {
+            return new Response(JSON.stringify({ message: '请求过于频繁' }), { status: 429, headers: { 'Content-Type': 'application/json' } });
+          }
+          const tokenHeader = request.headers.get('X-Notify-Token') || '';
+          const tokenQuery = url.searchParams.get('token') || '';
+          const providedToken = tokenHeader || tokenQuery;
+          if (!providedToken || providedToken !== (config.jwtSecret || '')) {
+            return new Response(JSON.stringify({ message: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+          }
           const body: any = await request.json();
           const title = body.title || '第三方通知';
           const content = body.content || '';
