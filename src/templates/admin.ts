@@ -161,11 +161,31 @@ export const adminPage = `
 
     <!-- Main Content -->
     <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-      <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-        <h2 class="text-lg font-semibold text-gray-800"><i class="fas fa-tasks mr-2 text-indigo-500"></i>订阅列表</h2>
-        <button onclick="openModal()" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium shadow-md flex items-center">
-          <i class="fas fa-plus mr-2"></i>添加订阅
-        </button>
+      <div class="px-6 py-4 border-b border-gray-100 bg-gray-50">
+        <div class="flex flex-col md:flex-row md:justify-between md:items-center space-y-3 md:space-y-0">
+          <h2 class="text-lg font-semibold text-gray-800"><i class="fas fa-tasks mr-2 text-indigo-500"></i>订阅列表</h2>
+          <div class="flex items-center space-x-3">
+            <input id="searchInput" type="text" placeholder="搜索名称或类型" class="w-48 md:w-64 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <select id="sortSelect" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="expiryDate">按到期时间</option>
+              <option value="name">按名称</option>
+              <option value="price">按价格</option>
+            </select>
+            <button id="sortDirBtn" class="px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-100" title="切换升序/降序">
+              <i id="sortDirIcon" class="fas fa-arrow-down-a-z"></i>
+            </button>
+            <select id="filterSelect" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="all">全部</option>
+              <option value="active">活跃</option>
+              <option value="expiring">即将到期(7天)</option>
+              <option value="expired">已过期</option>
+              <option value="inactive">已停用</option>
+            </select>
+          </div>
+          <button onclick="openModal()" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium shadow-md flex items-center">
+            <i class="fas fa-plus mr-2"></i>添加订阅
+          </button>
+        </div>
       </div>
       
       <div class="overflow-x-auto">
@@ -176,13 +196,15 @@ export const adminPage = `
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">类型</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">周期</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">到期时间</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">价格</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">月均支出</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200" id="subscriptionList">
             <tr>
-              <td colspan="6" class="px-6 py-10 text-center text-gray-500">
+              <td colspan="8" class="px-6 py-10 text-center text-gray-500">
                 <i class="fas fa-spinner fa-spin mr-2"></i>加载中...
               </td>
             </tr>
@@ -604,11 +626,15 @@ export const adminPage = `
     // Initialize Global Variables
     let subscriptions = [];
     let startDatePicker, expiryDatePicker;
+    let searchQuery = '';
+    let sortKey = 'expiryDate';
+    let sortDir = 'asc';
+    let filterKey = 'all';
 
     // Load Subscriptions
     async function loadSubscriptions() {
       const tbody = document.getElementById('subscriptionList');
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-10"><i class="fas fa-spinner fa-spin mr-2"></i>加载中...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center py-10"><i class="fas fa-spinner fa-spin mr-2"></i>加载中...</td></tr>';
       
       try {
         const res = await fetch('/api/subscriptions');
@@ -618,7 +644,7 @@ export const adminPage = `
         updateStats();
       } catch (err) {
         console.error(err);
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-10 text-red-500">加载失败</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-10 text-red-500">加载失败</td></tr>';
         showToast('加载失败', 'error');
       }
     }
@@ -627,20 +653,55 @@ export const adminPage = `
         const tbody = document.getElementById('subscriptionList');
         tbody.innerHTML = '';
         
-        if (subscriptions.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" class="text-center py-10 text-gray-500">暂无订阅，点击上方按钮添加</td></tr>';
+        let list = subscriptions.slice();
+        if (searchQuery && searchQuery.length > 0) {
+          const q = searchQuery;
+          list = list.filter(s => {
+            const text = ((s.name || '') + ' ' + (s.customType || '') + ' ' + (s.notes || '')).toLowerCase();
+            return text.includes(q);
+          });
+        }
+        if (filterKey && filterKey !== 'all') {
+          const today = new Date();
+          today.setHours(0,0,0,0);
+          list = list.filter(s => {
+            const exp = new Date(s.expiryDate);
+            exp.setHours(0,0,0,0);
+            const diff = Math.ceil((exp - today) / (1000 * 60 * 60 * 24));
+            if (filterKey === 'active') return s.isActive !== false && diff >= 0;
+            if (filterKey === 'expiring') return s.isActive !== false && diff >= 0 && diff <= (s.reminderDays || 7);
+            if (filterKey === 'expired') return diff < 0;
+            if (filterKey === 'inactive') return s.isActive === false;
+            return true;
+          });
+        }
+        
+        if (list.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8" class="text-center py-10 text-gray-500">暂无订阅，点击上方按钮添加</td></tr>';
           return;
         }
         
-        subscriptions.sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
+        if (sortKey === 'name') {
+          list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        } else if (sortKey === 'price') {
+          list.sort((a, b) => {
+            const pa = a.price !== undefined ? Number(a.price) : NaN;
+            const pb = b.price !== undefined ? Number(b.price) : NaN;
+            const va = isNaN(pa) ? Number.POSITIVE_INFINITY : pa;
+            const vb = isNaN(pb) ? Number.POSITIVE_INFINITY : pb;
+            return va - vb;
+          });
+        } else {
+          list.sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
+        }
+        if (sortDir === 'desc') list.reverse();
         
         const now = new Date();
         const unitMap = { day: '天', month: '月', year: '年' };
         
-        subscriptions.forEach(sub => {
+        list.forEach(sub => {
           const tr = document.createElement('tr');
           const exp = new Date(sub.expiryDate);
-          // Calculate diff ignoring time
           const today = new Date();
           today.setHours(0,0,0,0);
           const expDay = new Date(exp);
@@ -655,6 +716,20 @@ export const adminPage = `
           
           const dateStr = exp.toISOString().split('T')[0];
           
+          let priceStr = '-';
+          let monthlyStr = '-';
+          if (sub.price !== undefined && !isNaN(Number(sub.price))) {
+            const price = Number(sub.price);
+            const val = sub.periodValue || 1;
+            const unit = sub.periodUnit || 'month';
+            let m = 0;
+            if (unit === 'month') m = price / Math.max(1, val);
+            else if (unit === 'year') m = price / Math.max(1, val * 12);
+            else if (unit === 'day') m = price * (30 / Math.max(1, val));
+            priceStr = '¥' + price.toFixed(2);
+            monthlyStr = '¥' + m.toFixed(2);
+          }
+          
           tr.innerHTML = \`
             <td class="px-6 py-4 whitespace-nowrap">
                 <div class="text-sm font-medium text-gray-900">\${sub.name}</div>
@@ -666,6 +741,8 @@ export const adminPage = `
               \${dateStr}
               <div class="text-xs text-gray-400">\${sub.useLunar ? '农历' : '公历'}</div>
             </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${priceStr}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${monthlyStr}</td>
             <td class="px-6 py-4 whitespace-nowrap">\${statusHtml}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
               <button onclick="openModal('\${sub.id}')" class="text-indigo-600 hover:text-indigo-900 mr-3"><i class="fas fa-edit"></i></button>
@@ -955,6 +1032,30 @@ export const adminPage = `
       });
       document.getElementById('calculateExpiryBtn').addEventListener('click', calculateExpiryDate);
       document.getElementById('showLunar').addEventListener('change', toggleLunarDisplay);
+      const searchEl = document.getElementById('searchInput');
+      if (searchEl) searchEl.addEventListener('input', (e) => {
+        searchQuery = e.target.value.trim().toLowerCase();
+        renderSubscriptions();
+      });
+      const sortEl = document.getElementById('sortSelect');
+      if (sortEl) sortEl.addEventListener('change', (e) => {
+        sortKey = e.target.value;
+        renderSubscriptions();
+      });
+      const sortDirBtn = document.getElementById('sortDirBtn');
+      const sortDirIcon = document.getElementById('sortDirIcon');
+      if (sortDirBtn) sortDirBtn.addEventListener('click', () => {
+        sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+        if (sortDirIcon) {
+          sortDirIcon.className = sortDir === 'asc' ? 'fas fa-arrow-down-a-z' : 'fas fa-arrow-up-z-a';
+        }
+        renderSubscriptions();
+      });
+      const filterEl = document.getElementById('filterSelect');
+      if (filterEl) filterEl.addEventListener('change', (e) => {
+        filterKey = e.target.value;
+        renderSubscriptions();
+      });
       
       // Timezone check
       setInterval(() => {
