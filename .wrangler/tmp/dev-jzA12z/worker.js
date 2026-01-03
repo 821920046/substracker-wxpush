@@ -2669,12 +2669,33 @@ var SubscriptionService = class {
   }
   async getAllSubscriptions() {
     if (!this.env.SUBSCRIPTIONS_KV) return [];
-    const data = await this.env.SUBSCRIPTIONS_KV.get("subscriptions");
-    return data ? JSON.parse(data) : [];
+    const indexStr = await this.env.SUBSCRIPTIONS_KV.get("subscriptions:index");
+    if (indexStr) {
+      const ids = JSON.parse(indexStr);
+      const items = [];
+      for (const id of ids) {
+        const s = await this.env.SUBSCRIPTIONS_KV.get("subscription:" + id);
+        if (s) items.push(JSON.parse(s));
+      }
+      return items;
+    }
+    const legacy = await this.env.SUBSCRIPTIONS_KV.get("subscriptions");
+    if (legacy) {
+      const list = JSON.parse(legacy);
+      const ids = list.map((s) => s.id);
+      await this.env.SUBSCRIPTIONS_KV.put("subscriptions:index", JSON.stringify(ids));
+      for (const s of list) {
+        await this.env.SUBSCRIPTIONS_KV.put("subscription:" + s.id, JSON.stringify(s));
+      }
+      return list;
+    }
+    return [];
   }
   async getSubscription(id) {
+    const s = await this.env.SUBSCRIPTIONS_KV.get("subscription:" + id);
+    if (s) return JSON.parse(s);
     const subscriptions = await this.getAllSubscriptions();
-    return subscriptions.find((s) => s.id === id);
+    return subscriptions.find((s2) => s2.id === id);
   }
   async createSubscription(subscription) {
     try {
@@ -2736,8 +2757,11 @@ var SubscriptionService = class {
         createdAt: (/* @__PURE__ */ new Date()).toISOString(),
         updatedAt: (/* @__PURE__ */ new Date()).toISOString()
       };
-      subscriptions.push(newSubscription);
-      await this.env.SUBSCRIPTIONS_KV.put("subscriptions", JSON.stringify(subscriptions));
+      const indexStr = await this.env.SUBSCRIPTIONS_KV.get("subscriptions:index");
+      const ids = indexStr ? JSON.parse(indexStr) : [];
+      ids.push(newSubscription.id);
+      await this.env.SUBSCRIPTIONS_KV.put("subscriptions:index", JSON.stringify(ids));
+      await this.env.SUBSCRIPTIONS_KV.put("subscription:" + newSubscription.id, JSON.stringify(newSubscription));
       return { success: true, subscription: newSubscription };
     } catch (error) {
       console.error("\u521B\u5EFA\u8BA2\u9605\u5F02\u5E38\uFF1A", error);
@@ -2746,9 +2770,8 @@ var SubscriptionService = class {
   }
   async updateSubscription(id, subscription) {
     try {
-      const subscriptions = await this.getAllSubscriptions();
-      const index = subscriptions.findIndex((s) => s.id === id);
-      if (index === -1) {
+      const current = await this.getSubscription(id);
+      if (!current) {
         return { success: false, message: "\u8BA2\u9605\u4E0D\u5B58\u5728" };
       }
       if (!subscription.name || !subscription.expiryDate) {
@@ -2789,36 +2812,38 @@ var SubscriptionService = class {
           subscription.expiryDate = expiryDate.toISOString();
         }
       }
-      subscriptions[index] = {
-        ...subscriptions[index],
+      const updated = {
+        ...current,
         name: subscription.name,
-        customType: subscription.customType || subscriptions[index].customType || "",
-        startDate: subscription.startDate || subscriptions[index].startDate,
+        customType: subscription.customType || current.customType || "",
+        startDate: subscription.startDate || current.startDate,
         expiryDate: subscription.expiryDate,
-        periodValue: subscription.periodValue || subscriptions[index].periodValue || 1,
-        periodUnit: subscription.periodUnit || subscriptions[index].periodUnit || "month",
-        price: subscription.price !== void 0 ? Number(subscription.price) : subscriptions[index].price,
-        reminderDays: subscription.reminderDays !== void 0 ? subscription.reminderDays : subscriptions[index].reminderDays,
+        periodValue: subscription.periodValue || current.periodValue || 1,
+        periodUnit: subscription.periodUnit || current.periodUnit || "month",
+        price: subscription.price !== void 0 ? Number(subscription.price) : current.price,
+        reminderDays: subscription.reminderDays !== void 0 ? subscription.reminderDays : current.reminderDays,
         notes: subscription.notes || "",
-        isActive: subscription.isActive !== void 0 ? subscription.isActive : subscriptions[index].isActive,
-        autoRenew: subscription.autoRenew !== void 0 ? subscription.autoRenew : subscriptions[index].autoRenew,
+        isActive: subscription.isActive !== void 0 ? subscription.isActive : current.isActive,
+        autoRenew: subscription.autoRenew !== void 0 ? subscription.autoRenew : current.autoRenew,
         useLunar,
         updatedAt: (/* @__PURE__ */ new Date()).toISOString()
       };
-      await this.env.SUBSCRIPTIONS_KV.put("subscriptions", JSON.stringify(subscriptions));
-      return { success: true, subscription: subscriptions[index] };
+      await this.env.SUBSCRIPTIONS_KV.put("subscription:" + id, JSON.stringify(updated));
+      return { success: true, subscription: updated };
     } catch (error) {
       return { success: false, message: "\u66F4\u65B0\u8BA2\u9605\u5931\u8D25" };
     }
   }
   async deleteSubscription(id) {
     try {
-      const subscriptions = await this.getAllSubscriptions();
-      const filtered = subscriptions.filter((s) => s.id !== id);
-      if (filtered.length === subscriptions.length) {
+      const indexStr = await this.env.SUBSCRIPTIONS_KV.get("subscriptions:index");
+      const ids = indexStr ? JSON.parse(indexStr) : [];
+      const newIds = ids.filter((x) => x !== id);
+      if (newIds.length === ids.length) {
         return { success: false, message: "\u8BA2\u9605\u4E0D\u5B58\u5728" };
       }
-      await this.env.SUBSCRIPTIONS_KV.put("subscriptions", JSON.stringify(filtered));
+      await this.env.SUBSCRIPTIONS_KV.put("subscriptions:index", JSON.stringify(newIds));
+      await this.env.SUBSCRIPTIONS_KV.delete("subscription:" + id);
       return { success: true };
     } catch (error) {
       return { success: false, message: "\u5220\u9664\u8BA2\u9605\u5931\u8D25" };
@@ -2826,16 +2851,15 @@ var SubscriptionService = class {
   }
   async toggleSubscriptionStatus(id, isActive) {
     try {
-      const subscriptions = await this.getAllSubscriptions();
-      const index = subscriptions.findIndex((s) => s.id === id);
-      if (index === -1) return { success: false, message: "\u8BA2\u9605\u4E0D\u5B58\u5728" };
-      subscriptions[index] = {
-        ...subscriptions[index],
+      const current = await this.getSubscription(id);
+      if (!current) return { success: false, message: "\u8BA2\u9605\u4E0D\u5B58\u5728" };
+      const updated = {
+        ...current,
         isActive,
         updatedAt: (/* @__PURE__ */ new Date()).toISOString()
       };
-      await this.env.SUBSCRIPTIONS_KV.put("subscriptions", JSON.stringify(subscriptions));
-      return { success: true, subscription: subscriptions[index] };
+      await this.env.SUBSCRIPTIONS_KV.put("subscription:" + id, JSON.stringify(updated));
+      return { success: true, subscription: updated };
     } catch (error) {
       return { success: false, message: "\u66F4\u65B0\u72B6\u6001\u5931\u8D25" };
     }
@@ -2889,7 +2913,7 @@ var SubscriptionService = class {
           sub.expiryDate = expiryDate.toISOString();
         }
         sub.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-        subscriptions[i] = sub;
+        await this.env.SUBSCRIPTIONS_KV.put("subscription:" + sub.id, JSON.stringify(sub));
         hasUpdates = true;
         const newExpiry = new Date(sub.expiryDate);
         newExpiry.setHours(0, 0, 0, 0);
@@ -2907,7 +2931,6 @@ var SubscriptionService = class {
       }
     }
     if (hasUpdates) {
-      await this.env.SUBSCRIPTIONS_KV.put("subscriptions", JSON.stringify(subscriptions));
     }
     return { notifications };
   }

@@ -8,11 +8,32 @@ export class SubscriptionService {
 
   async getAllSubscriptions(): Promise<Subscription[]> {
     if (!this.env.SUBSCRIPTIONS_KV) return [];
-    const data = await this.env.SUBSCRIPTIONS_KV.get('subscriptions');
-    return data ? JSON.parse(data) : [];
+    const indexStr = await this.env.SUBSCRIPTIONS_KV.get('subscriptions:index');
+    if (indexStr) {
+      const ids: string[] = JSON.parse(indexStr);
+      const items: Subscription[] = [];
+      for (const id of ids) {
+        const s = await this.env.SUBSCRIPTIONS_KV.get('subscription:' + id);
+        if (s) items.push(JSON.parse(s));
+      }
+      return items;
+    }
+    const legacy = await this.env.SUBSCRIPTIONS_KV.get('subscriptions');
+    if (legacy) {
+      const list: Subscription[] = JSON.parse(legacy);
+      const ids = list.map(s => s.id);
+      await this.env.SUBSCRIPTIONS_KV.put('subscriptions:index', JSON.stringify(ids));
+      for (const s of list) {
+        await this.env.SUBSCRIPTIONS_KV.put('subscription:' + s.id, JSON.stringify(s));
+      }
+      return list;
+    }
+    return [];
   }
 
   async getSubscription(id: string): Promise<Subscription | undefined> {
+    const s = await this.env.SUBSCRIPTIONS_KV.get('subscription:' + id);
+    if (s) return JSON.parse(s);
     const subscriptions = await this.getAllSubscriptions();
     return subscriptions.find(s => s.id === id);
   }
@@ -83,8 +104,11 @@ export class SubscriptionService {
         updatedAt: new Date().toISOString()
       };
 
-      subscriptions.push(newSubscription);
-      await this.env.SUBSCRIPTIONS_KV.put('subscriptions', JSON.stringify(subscriptions));
+      const indexStr = await this.env.SUBSCRIPTIONS_KV.get('subscriptions:index');
+      const ids: string[] = indexStr ? JSON.parse(indexStr) : [];
+      ids.push(newSubscription.id);
+      await this.env.SUBSCRIPTIONS_KV.put('subscriptions:index', JSON.stringify(ids));
+      await this.env.SUBSCRIPTIONS_KV.put('subscription:' + newSubscription.id, JSON.stringify(newSubscription));
       return { success: true, subscription: newSubscription };
     } catch (error: any) {
       console.error("创建订阅异常：", error);
@@ -94,10 +118,8 @@ export class SubscriptionService {
 
   async updateSubscription(id: string, subscription: Partial<Subscription>): Promise<{ success: boolean; message?: string; subscription?: Subscription }> {
     try {
-      const subscriptions = await this.getAllSubscriptions();
-      const index = subscriptions.findIndex(s => s.id === id);
-
-      if (index === -1) {
+      const current = await this.getSubscription(id);
+      if (!current) {
         return { success: false, message: '订阅不存在' };
       }
 
@@ -143,25 +165,25 @@ export class SubscriptionService {
          }
       }
 
-      subscriptions[index] = {
-        ...subscriptions[index],
+      const updated: Subscription = {
+        ...current,
         name: subscription.name,
-        customType: subscription.customType || subscriptions[index].customType || '',
-        startDate: subscription.startDate || subscriptions[index].startDate,
+        customType: subscription.customType || current.customType || '',
+        startDate: subscription.startDate || current.startDate,
         expiryDate: subscription.expiryDate!,
-        periodValue: subscription.periodValue || subscriptions[index].periodValue || 1,
-        periodUnit: subscription.periodUnit || subscriptions[index].periodUnit || 'month',
-        price: subscription.price !== undefined ? Number(subscription.price) : subscriptions[index].price,
-        reminderDays: subscription.reminderDays !== undefined ? subscription.reminderDays : subscriptions[index].reminderDays,
+        periodValue: subscription.periodValue || current.periodValue || 1,
+        periodUnit: subscription.periodUnit || current.periodUnit || 'month',
+        price: subscription.price !== undefined ? Number(subscription.price) : current.price,
+        reminderDays: subscription.reminderDays !== undefined ? subscription.reminderDays : current.reminderDays,
         notes: subscription.notes || '',
-        isActive: subscription.isActive !== undefined ? subscription.isActive : subscriptions[index].isActive,
-        autoRenew: subscription.autoRenew !== undefined ? subscription.autoRenew : subscriptions[index].autoRenew,
+        isActive: subscription.isActive !== undefined ? subscription.isActive : current.isActive,
+        autoRenew: subscription.autoRenew !== undefined ? subscription.autoRenew : current.autoRenew,
         useLunar: useLunar,
         updatedAt: new Date().toISOString()
       };
 
-      await this.env.SUBSCRIPTIONS_KV.put('subscriptions', JSON.stringify(subscriptions));
-      return { success: true, subscription: subscriptions[index] };
+      await this.env.SUBSCRIPTIONS_KV.put('subscription:' + id, JSON.stringify(updated));
+      return { success: true, subscription: updated };
     } catch (error: any) {
       return { success: false, message: '更新订阅失败' };
     }
@@ -169,12 +191,14 @@ export class SubscriptionService {
 
   async deleteSubscription(id: string): Promise<{ success: boolean; message?: string }> {
     try {
-      const subscriptions = await this.getAllSubscriptions();
-      const filtered = subscriptions.filter(s => s.id !== id);
-      if (filtered.length === subscriptions.length) {
+      const indexStr = await this.env.SUBSCRIPTIONS_KV.get('subscriptions:index');
+      const ids: string[] = indexStr ? JSON.parse(indexStr) : [];
+      const newIds = ids.filter(x => x !== id);
+      if (newIds.length === ids.length) {
         return { success: false, message: '订阅不存在' };
       }
-      await this.env.SUBSCRIPTIONS_KV.put('subscriptions', JSON.stringify(filtered));
+      await this.env.SUBSCRIPTIONS_KV.put('subscriptions:index', JSON.stringify(newIds));
+      await this.env.SUBSCRIPTIONS_KV.delete('subscription:' + id);
       return { success: true };
     } catch (error) {
       return { success: false, message: '删除订阅失败' };
@@ -183,18 +207,15 @@ export class SubscriptionService {
   
   async toggleSubscriptionStatus(id: string, isActive: boolean): Promise<{ success: boolean; message?: string; subscription?: Subscription }> {
     try {
-      const subscriptions = await this.getAllSubscriptions();
-      const index = subscriptions.findIndex(s => s.id === id);
-      if (index === -1) return { success: false, message: '订阅不存在' };
-      
-      subscriptions[index] = {
-        ...subscriptions[index],
+      const current = await this.getSubscription(id);
+      if (!current) return { success: false, message: '订阅不存在' };
+      const updated: Subscription = {
+        ...current,
         isActive: isActive,
         updatedAt: new Date().toISOString()
       };
-      
-      await this.env.SUBSCRIPTIONS_KV.put('subscriptions', JSON.stringify(subscriptions));
-      return { success: true, subscription: subscriptions[index] };
+      await this.env.SUBSCRIPTIONS_KV.put('subscription:' + id, JSON.stringify(updated));
+      return { success: true, subscription: updated };
     } catch (error) {
       return { success: false, message: '更新状态失败' };
     }
@@ -274,7 +295,7 @@ export class SubscriptionService {
           }
           
           sub.updatedAt = new Date().toISOString();
-          subscriptions[i] = sub;
+          await this.env.SUBSCRIPTIONS_KV.put('subscription:' + sub.id, JSON.stringify(sub));
           hasUpdates = true;
           
           // Recalculate days remaining for the renewed subscription
@@ -304,7 +325,6 @@ export class SubscriptionService {
     }
 
     if (hasUpdates) {
-       await this.env.SUBSCRIPTIONS_KV.put('subscriptions', JSON.stringify(subscriptions));
     }
 
     return { notifications };
