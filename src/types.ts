@@ -40,6 +40,7 @@ export interface WeNotifyConfig {
   token: string;
   userid?: string;
   templateId?: string;
+  path?: string;
 }
 
 export interface WebhookConfig {

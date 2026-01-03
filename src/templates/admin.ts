@@ -906,7 +906,7 @@ export const adminPage = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${sub.periodValue}\${unitMap[sub.periodUnit]}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
               \${dateStr}
-              <div class="text-xs text-gray-400">\${sub.useLunar ? '农历' : '公历'}</div>
+              <div class="text-xs text-gray-400" title="\${sub.useLunar ? '按农历周期滚动，显示为换算后的阳历日期' : '按公历周期滚动'}">\${sub.useLunar ? '农历' : '公历'}</div>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${priceStr}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${monthlyStr}</td>

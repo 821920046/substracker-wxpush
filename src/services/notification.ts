@@ -225,9 +225,10 @@ export async function sendWeNotifyEdgeNotification(title: string, content: strin
     }
 
     const tokenStr = config.wenotify.token.trim();
+    const path = (config.wenotify.path || '/wxsend').trim();
+    const joined = base + (path.startsWith('/') ? '' : '/') + path;
     const addToken = (u: string) => u + (u.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(tokenStr);
-    const primaryUrl = addToken(url);
-    const altUrl = addToken(base + '/api/wxsend');
+    const primaryUrl = addToken(joined);
 
     const body: any = {
       title: title,
@@ -251,20 +252,9 @@ export async function sendWeNotifyEdgeNotification(title: string, content: strin
     
     if (!response.ok) {
       const firstText = await response.text();
-      response = await requestWithRetry(altUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': tokenStr
-        },
-        body: JSON.stringify(body)
-      }, 2, 8000);
-      if (!response.ok) {
-        const secondText = await response.text();
-        const msg = `primary HTTP ${response.status}: ${firstText}; alt HTTP ${response.status}: ${secondText}`;
-        if (throwOnError) throw new Error(msg);
-        return false;
-      }
+      const msg = `HTTP ${response.status}: ${firstText}`;
+      if (throwOnError) throw new Error(msg);
+      return false;
     }
     return true;
   } catch (error: any) {

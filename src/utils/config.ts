@@ -49,7 +49,8 @@ export async function getConfig(env: Env): Promise<Config> {
         url: config.WENOTIFY_URL || '',
         token: config.WENOTIFY_TOKEN || '',
         userid: config.WENOTIFY_USERID || '',
-        templateId: config.WENOTIFY_TEMPLATE_ID || ''
+        templateId: config.WENOTIFY_TEMPLATE_ID || '',
+        path: config.WENOTIFY_PATH || '/wxsend'
       },
       
       wechatBot: {

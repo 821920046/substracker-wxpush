@@ -231,6 +231,10 @@ export const configPage = `
                 <input type="text" id="wenotifyToken" placeholder="在 WeNotify Edge 中设置的 API_TOKEN" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
               </div>
               <div>
+                <label for="wenotifyPath" class="block text-sm font-medium text-gray-700">端点路径</label>
+                <input type="text" id="wenotifyPath" placeholder="/wxsend 或 /api/wxsend" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" value="/wxsend">
+              </div>
+              <div>
                 <label for="wenotifyUserid" class="block text-sm font-medium text-gray-700">UserID (可选)</label>
                 <input type="text" id="wenotifyUserid" placeholder="OPENID1|OPENID2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
               </div>
@@ -444,6 +448,7 @@ export const configPage = `
         document.getElementById('notifyxApiKey').value = config.NOTIFYX_API_KEY || '';
         document.getElementById('wenotifyUrl').value = config.WENOTIFY_URL || '';
         document.getElementById('wenotifyToken').value = config.WENOTIFY_TOKEN || '';
+        document.getElementById('wenotifyPath').value = config.WENOTIFY_PATH || '/wxsend';
         document.getElementById('wenotifyUserid').value = config.WENOTIFY_USERID || '';
         document.getElementById('wenotifyTemplateId').value = config.WENOTIFY_TEMPLATE_ID || '';
         document.getElementById('webhookUrl').value = config.WEBHOOK_URL || '';
@@ -584,15 +589,16 @@ export const configPage = `
         return;
       }
 
-      const config = {
-        ADMIN_USERNAME: document.getElementById('adminUsername').value.trim(),
-        TG_BOT_TOKEN: document.getElementById('tgBotToken').value.trim(),
-        TG_CHAT_ID: document.getElementById('tgChatId').value.trim(),
-        NOTIFYX_API_KEY: document.getElementById('notifyxApiKey').value.trim(),
-        WENOTIFY_URL: document.getElementById('wenotifyUrl').value.trim(),
-        WENOTIFY_TOKEN: document.getElementById('wenotifyToken').value.trim(),
-        WENOTIFY_USERID: document.getElementById('wenotifyUserid').value.trim(),
-        WENOTIFY_TEMPLATE_ID: document.getElementById('wenotifyTemplateId').value.trim(),
+        const config = {
+          ADMIN_USERNAME: document.getElementById('adminUsername').value.trim(),
+          TG_BOT_TOKEN: document.getElementById('tgBotToken').value.trim(),
+          TG_CHAT_ID: document.getElementById('tgChatId').value.trim(),
+          NOTIFYX_API_KEY: document.getElementById('notifyxApiKey').value.trim(),
+          WENOTIFY_URL: document.getElementById('wenotifyUrl').value.trim(),
+          WENOTIFY_TOKEN: document.getElementById('wenotifyToken').value.trim(),
+          WENOTIFY_PATH: document.getElementById('wenotifyPath').value.trim() || '/wxsend',
+          WENOTIFY_USERID: document.getElementById('wenotifyUserid').value.trim(),
+          WENOTIFY_TEMPLATE_ID: document.getElementById('wenotifyTemplateId').value.trim(),
         WEBHOOK_URL: document.getElementById('webhookUrl').value.trim(),
         WEBHOOK_METHOD: document.getElementById('webhookMethod').value,
         WEBHOOK_HEADERS: document.getElementById('webhookHeaders').value.trim(),
@@ -782,13 +788,22 @@ export const configPage = `
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ type: type, ...config })
         });
-
-        const result = await response.json();
-
-        if (result.success) {
-          showToast(serviceName + ' 通知测试成功！', 'success');
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) {
+            showToast(serviceName + ' 通知测试成功！', 'success');
+          } else {
+            showToast(serviceName + ' 通知测试失败: ' + (result.message || '未知错误'), 'error');
+          }
         } else {
-          showToast(serviceName + ' 通知测试失败: ' + (result.message || '未知错误'), 'error');
+          let text = '';
+          try {
+            const data = await response.json();
+            text = data.message || JSON.stringify(data);
+          } catch {
+            text = await response.text();
+          }
+          showToast(serviceName + ' 通知测试失败: ' + (text || ('HTTP ' + response.status)), 'error');
         }
       } catch (error) {
         console.error('测试通知失败:', error);

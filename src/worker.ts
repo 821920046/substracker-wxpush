@@ -258,6 +258,7 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
             WENOTIFY_TOKEN: newConfig.WENOTIFY_TOKEN || '',
             WENOTIFY_USERID: newConfig.WENOTIFY_USERID || '',
             WENOTIFY_TEMPLATE_ID: newConfig.WENOTIFY_TEMPLATE_ID || '',
+            WENOTIFY_PATH: newConfig.WENOTIFY_PATH || currentRawConfig.WENOTIFY_PATH || '/wxsend',
             WEBHOOK_URL: newConfig.WEBHOOK_URL || '',
             WEBHOOK_METHOD: newConfig.WEBHOOK_METHOD || 'POST',
             WEBHOOK_HEADERS: newConfig.WEBHOOK_HEADERS || '',
