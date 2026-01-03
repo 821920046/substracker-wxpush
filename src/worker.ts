@@ -15,8 +15,8 @@ import {
   sendBarkNotification,
   formatNotificationContent
 } from './services/notification';
-import { getConfig, getRawConfig, generateRandomSecret } from './utils/config';
-import { generateJWT, verifyJWT } from './utils/auth';
+import { getConfig, getRawConfig } from './utils/config';
+import { generateJWT, verifyJWT, generateRandomSecret } from './utils/auth';
 import { getCurrentTimeInTimezone, formatTimeInTimezone } from './utils/date';
 import { getCookieValue } from './utils/http';
 

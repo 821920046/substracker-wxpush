@@ -9,5 +9,8 @@
     "notification",
     "lunar-calendar"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^4.54.0"
+  }
 }
