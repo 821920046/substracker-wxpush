@@ -639,13 +639,19 @@ export const adminPage = `
     let filterKey = 'all';
     
     function toCSVRow(values) {
-      return values.map(v => {
-        if (v === undefined || v === null) return '';
-        const s = String(v);
-        const needQuote = s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r');
-        const escaped = s.replace(/"/g, '""');
-        return needQuote ? '"' + escaped + '"' : escaped;
-      }).join(',');
+      let out = '';
+      for (let i = 0; i < values.length; i++) {
+        let v = values[i];
+        if (v === undefined || v === null) v = '';
+        let s = String(v);
+        const needQuote = (s.indexOf(',') !== -1) || (s.indexOf('"') !== -1) || (s.indexOf('\n') !== -1) || (s.indexOf('\r') !== -1);
+        if (needQuote) {
+          s = '"' + s.replace(/"/g, '""') + '"';
+        }
+        out += s;
+        if (i < values.length - 1) out += ',';
+      }
+      return out;
     }
     
     function exportCSV() {
@@ -1032,6 +1038,12 @@ export const adminPage = `
         toggleLunarDisplay();
       }, 50);
     }
+    
+    // Expose functions to global for inline handlers
+    window.openModal = openModal;
+    window.deleteSubscription = deleteSubscription;
+    window.toggleStatus = toggleStatus;
+    window.testNotify = testNotify;
     
     document.getElementById('closeModal').addEventListener('click', () => {
       document.getElementById('subscriptionModal').classList.add('hidden');
