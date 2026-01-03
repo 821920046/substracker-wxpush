@@ -57,19 +57,21 @@ export default {
     const parts = dtf.formatToParts(now);
     const get = (type: string) => parts.find(x => x.type === type)?.value || '00';
     const hhmm = `${get('hour')}:${get('minute')}`;
-    const times = (config.reminderTimes && config.reminderTimes.length > 0) ? config.reminderTimes : ['08:00'];
-    if (!times.includes(hhmm)) {
-      return;
-    }
+    const globalTimes = (config.reminderTimes && config.reminderTimes.length > 0) ? config.reminderTimes : ['08:00'];
     
     const subscriptionService = new SubscriptionService(env);
     const { notifications } = await subscriptionService.checkExpiringSubscriptions();
+    const filtered = notifications.filter(n => {
+      const t = n.subscription.dailyReminderTimes || [];
+      if (t.length > 0) return t.includes(hhmm);
+      return globalTimes.includes(hhmm);
+    });
     
-    if (notifications.length > 0) {
+    if (filtered.length > 0) {
       // 按到期时间排序
-      notifications.sort((a, b) => a.daysUntil - b.daysUntil);
+      filtered.sort((a, b) => a.daysUntil - b.daysUntil);
       
-      const subscriptions = notifications.map(n => ({
+      const subscriptions = filtered.map(n => ({
         ...n.subscription,
         daysRemaining: n.daysUntil
       }));

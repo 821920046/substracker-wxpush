@@ -343,6 +343,11 @@ export const adminPage = `
             <label class="block text-sm font-medium text-gray-700 mb-1">提醒设置 (天)</label>
             <input type="number" id="reminderDays" min="0" value="7" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" title="提前多少天提醒，0表示仅当天提醒">
           </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">当天重复提醒时段</label>
+            <input type="text" id="dailyReminderTimes" placeholder="08:00,12:00,18:00" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <p class="mt-1 text-xs text-gray-500">仅对该订阅生效，HH:mm，逗号分隔</p>
+          </div>
           <div class="flex items-end space-x-4 pb-2">
             <div class="flex items-center">
               <input type="checkbox" id="autoRenew" checked class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
@@ -1023,6 +1028,7 @@ export const adminPage = `
              document.getElementById('periodValue').value = sub.periodValue || 1;
              document.getElementById('periodUnit').value = sub.periodUnit || 'month';
              document.getElementById('reminderDays').value = sub.reminderDays !== undefined ? sub.reminderDays : 7;
+             document.getElementById('dailyReminderTimes').value = (sub.dailyReminderTimes || []).join(',');
              document.getElementById('useLunar').checked = !!sub.useLunar;
              if (priceEl) priceEl.value = sub.price !== undefined ? String(sub.price) : '';
           }
@@ -1071,6 +1077,7 @@ export const adminPage = `
         periodValue: parseInt(document.getElementById('periodValue').value),
         periodUnit: document.getElementById('periodUnit').value,
         reminderDays: parseInt(document.getElementById('reminderDays').value),
+        dailyReminderTimes: (function(){ const v = document.getElementById('dailyReminderTimes').value.trim(); return v ? v.split(',').map(s=>s.trim()).filter(s=>s.length>0) : []; })(),
         useLunar: document.getElementById('useLunar').checked,
         price: (function(){ const v = document.getElementById('price').value; return v ? parseFloat(v) : undefined; })()
       };

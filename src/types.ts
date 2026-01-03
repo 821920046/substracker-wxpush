@@ -8,6 +8,7 @@ export interface Subscription {
   periodUnit?: 'year' | 'month' | 'day';
   price?: number;
   reminderDays?: number;
+  dailyReminderTimes?: string[];
   notes?: string;
   isActive: boolean;
   autoRenew: boolean;
