@@ -673,8 +673,7 @@ var adminPage = `
         let v = values[i];
         if (v === undefined || v === null) v = '';
         let s = String(v);
-        const needQuote = (s.indexOf(',') !== -1) || (s.indexOf('"') !== -1) || (s.indexOf('
-') !== -1) || (s.indexOf('\r') !== -1);
+        const needQuote = (s.indexOf(',') !== -1) || (s.indexOf('"') !== -1) || (s.indexOf('') !== -1) || (s.indexOf('') !== -1);
         if (needQuote) {
           s = '"' + s.replace(/"/g, '""') + '"';
         }
@@ -703,8 +702,7 @@ var adminPage = `
           s.useLunar ? 'true' : 'false'
         ]));
       });
-      const csv = rows.join('\r
-');
+      const csv = rows.join('\\r\\n');
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -744,14 +742,12 @@ var adminPage = `
             } else if (ch === ',') {
               row.push(field);
               field = '';
-            } else if (ch === '\r') {
-              if (i < text.length && text[i] === '
-') i++;
+            } else if (ch === '\\r') {
+              if (i < text.length && text[i] === '\\n') i++;
               row.push(field);
               field = '';
               ended = true;
-            } else if (ch === '
-') {
+            } else if (ch === '\\n') {
               row.push(field);
               field = '';
               ended = true;
