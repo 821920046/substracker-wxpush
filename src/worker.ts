@@ -11,6 +11,7 @@ import {
   sendWeNotifyEdgeNotification,
   sendWebhookNotification,
   sendWechatBotNotification,
+  sendWeChatOfficialAccountNotification,
   sendEmailNotification,
   sendBarkNotification,
   formatNotificationContent
@@ -63,7 +64,7 @@ export default {
 
       const commonContent = formatNotificationContent(subscriptions, config);
       const title = '订阅到期提醒';
-      await sendNotificationToAllChannels(title, commonContent, config, '[定时任务]');
+      await sendNotificationToAllChannels(title, commonContent, config, env, '[定时任务]');
     }
   }
 };
@@ -209,7 +210,7 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
             return new Response(JSON.stringify({ message: '缺少必填参数 content' }), { status: 400 });
           }
 
-          await sendNotificationToAllChannels(title, content, config, '[第三方API]');
+          await sendNotificationToAllChannels(title, content, config, env, '[第三方API]');
 
           return new Response(JSON.stringify({
               message: '发送成功',
@@ -266,6 +267,10 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
             WECHATBOT_MSG_TYPE: newConfig.WECHATBOT_MSG_TYPE || 'text',
             WECHATBOT_AT_MOBILES: newConfig.WECHATBOT_AT_MOBILES || '',
             WECHATBOT_AT_ALL: newConfig.WECHATBOT_AT_ALL || 'false',
+            WECHAT_OA_APPID: newConfig.WECHAT_OA_APPID || '',
+            WECHAT_OA_APPSECRET: newConfig.WECHAT_OA_APPSECRET || '',
+            WECHAT_OA_TEMPLATE_ID: newConfig.WECHAT_OA_TEMPLATE_ID || '',
+            WECHAT_OA_USERIDS: newConfig.WECHAT_OA_USERIDS || '',
             RESEND_API_KEY: newConfig.RESEND_API_KEY || '',
             EMAIL_FROM: newConfig.EMAIL_FROM || '',
             EMAIL_FROM_NAME: newConfig.EMAIL_FROM_NAME || '',
@@ -338,6 +343,14 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
                 atAll: body.WECHATBOT_AT_ALL || config.wechatBot?.atAll || 'false'
             };
             success = await sendWechatBotNotification('测试通知', '测试通知...', tempConfig);
+        } else if (body.type === 'wechatOfficialAccount') {
+            tempConfig.wechatOfficialAccount = {
+                appId: body.WECHAT_OA_APPID || config.wechatOfficialAccount?.appId || '',
+                appSecret: body.WECHAT_OA_APPSECRET || config.wechatOfficialAccount?.appSecret || '',
+                templateId: body.WECHAT_OA_TEMPLATE_ID || config.wechatOfficialAccount?.templateId || '',
+                userIds: body.WECHAT_OA_USERIDS || config.wechatOfficialAccount?.userIds || ''
+            };
+            success = await sendWeChatOfficialAccountNotification('测试通知', '这是一条测试通知', tempConfig, env);
         } else if (body.type === 'email') {
             tempConfig.email = {
                 resendApiKey: body.RESEND_API_KEY || config.email?.resendApiKey || '',
@@ -398,7 +411,7 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
         sub.daysRemaining = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
         
         const content = formatNotificationContent([sub], config);
-        await sendNotificationToAllChannels('订阅提醒测试', content, config, '[手动测试]');
+        await sendNotificationToAllChannels('订阅提醒测试', content, config, env, '[手动测试]');
         return new Response(JSON.stringify({ success: true, message: '已发送' }), { headers: { 'Content-Type': 'application/json' } });
       } catch (e: any) {
         return new Response(JSON.stringify({ success: false, message: e.message }), { status: 500 });

@@ -68,6 +68,13 @@ export interface WeChatBotConfig {
   atAll?: string;
 }
 
+export interface WeChatOfficialAccountConfig {
+  appId: string;
+  appSecret: string;
+  templateId: string;
+  userIds: string; // Supports multiple user IDs separated by |
+}
+
 export interface Config {
   adminUsername?: string;
   adminPassword?: string;
@@ -79,6 +86,7 @@ export interface Config {
   notifyx?: NotifyXConfig;
   wenotify?: WeNotifyConfig;
   wechatBot?: WeChatBotConfig;
+  wechatOfficialAccount?: WeChatOfficialAccountConfig;
   webhook?: WebhookConfig;
   email?: EmailConfig;
   bark?: BarkConfig;

@@ -1,8 +1,33 @@
 
-import { Env, ChannelConfig, Subscription, Config } from '../types';
+import { Env, ChannelConfig, Subscription, Config, WeChatOfficialAccountConfig } from '../types';
 import { formatTimeInTimezone, formatTimezoneDisplay } from '../utils/date';
 import { lunarCalendar } from '../utils/lunar';
 import { requestWithRetry } from '../utils/http';
+
+/**
+ * 获取微信公众号 Access Token
+ */
+async function getWeChatAccessToken(env: Env, config: WeChatOfficialAccountConfig): Promise<string | null> {
+  const key = 'wx_oa_access_token';
+  const cached = await env.SUBSCRIPTIONS_KV.get(key);
+  if (cached) return cached;
+
+  const url = `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${config.appId}&secret=${config.appSecret}`;
+  try {
+    const resp = await requestWithRetry(url, { method: 'GET' }, 2, 5000);
+    const data: any = await resp.json();
+    if (data.access_token) {
+      // 缓存 Token，有效期 7200 秒，这里设置 7000 秒
+      await env.SUBSCRIPTIONS_KV.put(key, data.access_token, { expirationTtl: 7000 });
+      return data.access_token;
+    }
+    console.error('[WeChat Official Account] 获取 Access Token 失败:', data);
+    return null;
+  } catch (e) {
+    console.error('[WeChat Official Account] 获取 Access Token 错误:', e);
+    return null;
+  }
+}
 
 /**
  * 格式化通知内容
@@ -74,7 +99,7 @@ export function formatNotificationContent(subscriptions: Subscription[], config:
 /**
  * 发送通知到所有启用的渠道
  */
-export async function sendNotificationToAllChannels(title: string, commonContent: string, config: Config, logPrefix = '[定时任务]'): Promise<void> {
+export async function sendNotificationToAllChannels(title: string, commonContent: string, config: Config, env: Env | null = null, logPrefix = '[定时任务]'): Promise<void> {
     if (!config.enabledNotifiers || config.enabledNotifiers.length === 0) {
         console.log(`${logPrefix} 未启用任何通知渠道。`);
         return;
@@ -89,6 +114,11 @@ export async function sendNotificationToAllChannels(title: string, commonContent
         const wenotifyContent = commonContent.replace(/(\**|\*|##|#|`)/g, '');
         const success = await sendWeNotifyEdgeNotification(title, wenotifyContent, config);
         console.log(`${logPrefix} 发送WeNotify Edge通知 ${success ? '成功' : '失败'}`);
+    }
+    if (config.enabledNotifiers.includes('wechatOfficialAccount')) {
+        const content = commonContent.replace(/(\**|\*|##|#|`)/g, '');
+        const success = await sendWeChatOfficialAccountNotification(title, content, config, env);
+        console.log(`${logPrefix} 发送微信公众号通知 ${success ? '成功' : '失败'}`);
     }
     if (config.enabledNotifiers.includes('telegram')) {
         const telegramContent = `*${title}*\n\n${commonContent}`;
@@ -421,6 +451,65 @@ export async function sendWechatBotNotification(title: string, content: string, 
     }
   } catch (error) {
     console.error('[企业微信机器人] 发送通知失败:', error);
+    return false;
+  }
+}
+
+// 微信公众号（服务号）通知
+export async function sendWeChatOfficialAccountNotification(title: string, content: string, config: Config, env: Env | null): Promise<boolean> {
+  try {
+    if (!env) {
+      console.error('[WeChat Official Account] 缺少 Env 环境，无法使用 KV 缓存 Token');
+      return false;
+    }
+    const oaConfig = config.wechatOfficialAccount;
+    if (!oaConfig?.appId || !oaConfig?.appSecret || !oaConfig?.templateId || !oaConfig?.userIds) {
+      console.error('[WeChat Official Account] 通知未配置，缺少必要参数');
+      return false;
+    }
+
+    const token = await getWeChatAccessToken(env, oaConfig);
+    if (!token) return false;
+
+    const userIds = oaConfig.userIds.split('|').map(id => id.trim()).filter(id => id);
+    let successCount = 0;
+
+    for (const userId of userIds) {
+      // 构造符合微信模板消息的数据
+      // 这里采用一种比较通用的映射方式，兼容 Plan 中提到的 thing01, time01, number01, thing02
+      // 注意：微信对字段长度有限制，尤其是 thing 类型
+      
+      const payloadData: any = {
+        thing01: { value: title.substring(0, 20) }, // 标题，截断到20字
+        time01: { value: new Date().toISOString().split('T')[0] }, // 当前日期
+        number01: { value: '1' }, // 这里的语义不太明确，暂时填1或者由外部传入
+        thing02: { value: content.substring(0, 20) + (content.length > 20 ? '...' : '') } // 内容，截断
+      };
+
+      // 尝试发送
+      const resp = await requestWithRetry(`https://api.weixin.qq.com/cgi-bin/message/template/send?access_token=${token}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          touser: userId,
+          template_id: oaConfig.templateId,
+          data: payloadData
+        })
+      }, 2, 5000);
+
+      if (resp.ok) {
+        const resJson: any = await resp.json();
+        if (resJson.errcode === 0) {
+          successCount++;
+        } else {
+          console.error(`[WeChat Official Account] 发送给 ${userId} 失败:`, resJson);
+        }
+      }
+    }
+    
+    return successCount > 0;
+  } catch (error) {
+    console.error('[WeChat Official Account] 发送通知失败:', error);
     return false;
   }
 }

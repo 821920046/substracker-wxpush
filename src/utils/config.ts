@@ -58,6 +58,13 @@ export async function getConfig(env: Env): Promise<Config> {
         atMobiles: config.WECHATBOT_AT_MOBILES || '',
         atAll: config.WECHATBOT_AT_ALL || 'false'
       },
+
+      wechatOfficialAccount: {
+        appId: config.WECHAT_OA_APPID || '',
+        appSecret: config.WECHAT_OA_APPSECRET || '',
+        templateId: config.WECHAT_OA_TEMPLATE_ID || '',
+        userIds: config.WECHAT_OA_USERIDS || ''
+      },
       
       webhook: {
         url: config.WEBHOOK_URL || '',
@@ -95,6 +102,7 @@ export async function getConfig(env: Env): Promise<Config> {
       notifyx: { apiKey: '' },
       wenotify: { url: '', token: '', userid: '', templateId: '' },
       wechatBot: { webhook: '', msgType: 'text', atMobiles: '', atAll: 'false' },
+      wechatOfficialAccount: { appId: '', appSecret: '', templateId: '', userIds: '' },
       webhook: { url: '', method: 'POST', headers: '', template: '' },
       email: { resendApiKey: '', fromEmail: '', toEmail: '' },
       bark: { server: 'https://api.day.app', deviceKey: '', isArchive: 'false' }

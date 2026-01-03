@@ -151,6 +151,10 @@ export const configPage = `
                 <span class="ml-2 text-sm text-gray-700">企业微信机器人</span>
               </label>
               <label class="inline-flex items-center">
+                <input type="checkbox" name="enabledNotifiers" value="wechatOfficialAccount" class="form-checkbox h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                <span class="ml-2 text-sm text-gray-700">微信公众号</span>
+              </label>
+              <label class="inline-flex items-center">
                 <input type="checkbox" name="enabledNotifiers" value="email" class="form-checkbox h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
                 <span class="ml-2 text-sm text-gray-700">邮件通知</span>
               </label>
@@ -307,6 +311,33 @@ export const configPage = `
             <div class="flex justify-end">
               <button type="button" id="testWechatBotBtn" class="btn-secondary text-white px-4 py-2 rounded-md text-sm font-medium">
                 <i class="fas fa-paper-plane mr-2"></i>测试 企业微信机器人
+              </button>
+            </div>
+          </div>
+
+          <div id="wechatOfficialAccountConfig" class="config-section">
+            <h4 class="text-md font-medium text-gray-900 mb-3">微信公众号 配置</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label for="wechatOaAppId" class="block text-sm font-medium text-gray-700">AppID</label>
+                <input type="text" id="wechatOaAppId" placeholder="wx..." class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+              </div>
+              <div>
+                <label for="wechatOaAppSecret" class="block text-sm font-medium text-gray-700">AppSecret</label>
+                <input type="text" id="wechatOaAppSecret" placeholder="32位密钥" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+              </div>
+              <div>
+                <label for="wechatOaTemplateId" class="block text-sm font-medium text-gray-700">模板ID</label>
+                <input type="text" id="wechatOaTemplateId" placeholder="模板消息ID" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+              </div>
+              <div>
+                <label for="wechatOaUserIds" class="block text-sm font-medium text-gray-700">用户OpenID (多个用|分隔)</label>
+                <input type="text" id="wechatOaUserIds" placeholder="OPENID1|OPENID2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+              </div>
+            </div>
+            <div class="flex justify-end">
+              <button type="button" id="testWeChatOABtn" class="btn-secondary text-white px-4 py-2 rounded-md text-sm font-medium">
+                <i class="fas fa-paper-plane mr-2"></i>测试 微信公众号
               </button>
             </div>
           </div>
@@ -494,11 +525,12 @@ export const configPage = `
       const wenotifyConfig = document.getElementById('wenotifyConfig');
       const webhookConfig = document.getElementById('webhookConfig');
       const wechatbotConfig = document.getElementById('wechatbotConfig');
+      const wechatOfficialAccountConfig = document.getElementById('wechatOfficialAccountConfig');
       const emailConfig = document.getElementById('emailConfig');
       const barkConfig = document.getElementById('barkConfig');
 
       // 重置所有配置区域
-      [telegramConfig, notifyxConfig, wenotifyConfig, webhookConfig, wechatbotConfig, emailConfig, barkConfig].forEach(config => {
+      [telegramConfig, notifyxConfig, wenotifyConfig, webhookConfig, wechatbotConfig, wechatOfficialAccountConfig, emailConfig, barkConfig].forEach(config => {
         config.classList.remove('active', 'inactive');
         config.classList.add('inactive');
       });
@@ -520,6 +552,9 @@ export const configPage = `
         } else if (type === 'wechatbot') {
           wechatbotConfig.classList.remove('inactive');
           wechatbotConfig.classList.add('active');
+        } else if (type === 'wechatOfficialAccount') {
+          wechatOfficialAccountConfig.classList.remove('inactive');
+          wechatOfficialAccountConfig.classList.add('active');
         } else if (type === 'email') {
           emailConfig.classList.remove('inactive');
           emailConfig.classList.add('active');
@@ -567,6 +602,10 @@ export const configPage = `
         WECHATBOT_MSG_TYPE: document.getElementById('wechatbotMsgType').value,
         WECHATBOT_AT_MOBILES: document.getElementById('wechatbotAtMobiles').value.trim(),
         WECHATBOT_AT_ALL: document.getElementById('wechatbotAtAll').checked.toString(),
+        WECHAT_OA_APPID: document.getElementById('wechatOaAppId').value.trim(),
+        WECHAT_OA_APPSECRET: document.getElementById('wechatOaAppSecret').value.trim(),
+        WECHAT_OA_TEMPLATE_ID: document.getElementById('wechatOaTemplateId').value.trim(),
+        WECHAT_OA_USERIDS: document.getElementById('wechatOaUserIds').value.trim(),
         RESEND_API_KEY: document.getElementById('resendApiKey').value.trim(),
         EMAIL_FROM: document.getElementById('emailFrom').value.trim(),
         EMAIL_FROM_NAME: document.getElementById('emailFromName').value.trim(),
@@ -637,6 +676,7 @@ export const configPage = `
                           type === 'notifyx' ? 'NotifyX' :
                           type === 'wenotify' ? 'WeNotify Edge' :
                           type === 'wechatbot' ? '企业微信机器人' :
+                          type === 'wechatOfficialAccount' ? '微信公众号' :
                           type === 'email' ? '邮件通知' :
                           type === 'bark' ? 'Bark' : '企业微信应用通知';
 
@@ -695,6 +735,18 @@ export const configPage = `
 
         if (!config.WECHATBOT_WEBHOOK) {
           showToast('请先填写企业微信机器人 Webhook URL', 'warning');
+          button.innerHTML = originalContent;
+          button.disabled = false;
+          return;
+        }
+      } else if (type === 'wechatOfficialAccount') {
+        config.WECHAT_OA_APPID = document.getElementById('wechatOaAppId').value.trim();
+        config.WECHAT_OA_APPSECRET = document.getElementById('wechatOaAppSecret').value.trim();
+        config.WECHAT_OA_TEMPLATE_ID = document.getElementById('wechatOaTemplateId').value.trim();
+        config.WECHAT_OA_USERIDS = document.getElementById('wechatOaUserIds').value.trim();
+
+        if (!config.WECHAT_OA_APPID || !config.WECHAT_OA_APPSECRET || !config.WECHAT_OA_TEMPLATE_ID || !config.WECHAT_OA_USERIDS) {
+          showToast('请先填写微信公众号 AppID、AppSecret、模板ID 和 UserIDs', 'warning');
           button.innerHTML = originalContent;
           button.disabled = false;
           return;
