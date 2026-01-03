@@ -83,6 +83,7 @@ export const loginPage = `
         const response = await fetch('/api/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ username, password })
         });
         

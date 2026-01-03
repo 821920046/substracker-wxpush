@@ -161,7 +161,7 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
         return new Response(JSON.stringify({ success: true }), {
           headers: {
             'Content-Type': 'application/json',
-            'Set-Cookie': `token=${token}; HttpOnly; Path=/; SameSite=Strict; Max-Age=86400${secureFlag}`
+            'Set-Cookie': `token=${token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400${secureFlag}`
           }
         });
       } else {
@@ -182,7 +182,7 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       status: 302,
       headers: {
         'Location': '/',
-        'Set-Cookie': `token=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0${secureFlag}`
+        'Set-Cookie': `token=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0${secureFlag}`
       }
     });
   }
