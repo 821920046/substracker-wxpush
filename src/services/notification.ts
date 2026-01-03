@@ -239,7 +239,7 @@ export async function sendWeNotifyEdgeNotification(title: string, content: strin
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + config.wenotify.token
+        'Authorization': config.wenotify.token.trim()
       },
       body: JSON.stringify(body)
     }, 2, 8000);
