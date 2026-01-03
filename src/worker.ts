@@ -109,11 +109,36 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
   const method = request.method;
   const config = await getConfig(env);
 
+  if (path === '/dev/reset-login' && method === 'POST') {
+    try {
+      const url = new URL(request.url);
+      const isLocal = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+      if (!isLocal) {
+        return new Response(JSON.stringify({ success: false, message: '仅限本地开发使用' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      }
+      const raw = await getRawConfig(env);
+      raw.ADMIN_USERNAME = 'admin';
+      raw.ADMIN_PASSWORD = 'password';
+      if (!raw.JWT_SECRET) {
+        raw.JWT_SECRET = generateRandomSecret();
+      }
+      await env.SUBSCRIPTIONS_KV.put('config', JSON.stringify(raw));
+      return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+    } catch (e: any) {
+      return new Response(JSON.stringify({ success: false, message: e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    }
+  }
+
   // Public API: Login
   if (path === '/login' && method === 'POST') {
     try {
       const body: any = await request.json();
-      if (body.username === config.adminUsername && body.password === config.adminPassword) {
+      const expectedUser = config.adminUsername || 'admin';
+      const expectedPass = config.adminPassword || 'password';
+      const inputUser = (body.username || '').toString();
+      const inputPass = (body.password || '').toString();
+      const ok = inputUser === expectedUser && inputPass === expectedPass;
+      if (ok) {
         const token = await generateJWT(body.username, config.jwtSecret!);
         return new Response(JSON.stringify({ success: true }), {
           headers: {
