@@ -6,6 +6,7 @@ export interface Subscription {
   expiryDate: string; // ISO date string
   periodValue?: number;
   periodUnit?: 'year' | 'month' | 'day';
+  price?: number;
   reminderDays?: number;
   notes?: string;
   isActive: boolean;

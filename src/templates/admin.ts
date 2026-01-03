@@ -91,6 +91,8 @@ export const adminPage = `
       border-right: 6px solid transparent; border-bottom: 6px solid #1f2937;
     }
     .hover-tooltip.tooltip-above::before { top: auto; bottom: -6px; border-bottom: none; border-top: 6px solid #1f2937; }
+    .gauge { width: 96px; height: 96px; border-radius: 50%; background: conic-gradient(var(--gauge-color, #10b981) var(--gauge-deg, 0deg), #e5e7eb 0deg); display: grid; place-items: center; position: relative; }
+    .gauge-center { width: 68px; height: 68px; border-radius: 50%; background: white; display: grid; place-items: center; color: #374151; font-size: 0.9rem; font-weight: 600; box-shadow: inset 0 0 0 1px #e5e7eb; }
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen font-sans">
@@ -119,48 +121,40 @@ export const adminPage = `
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <!-- Dashboard Stats -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-      <div class="bg-white rounded-xl shadow-sm p-6 card-hover border-l-4 border-indigo-500">
-        <div class="flex items-center">
-          <div class="p-3 rounded-full bg-indigo-100 text-indigo-500">
-            <i class="fas fa-list-ul text-xl"></i>
-          </div>
-          <div class="ml-4">
-            <p class="text-sm text-gray-500 font-medium">总订阅数</p>
-            <p class="text-2xl font-bold text-gray-800" id="totalCount">-</p>
-          </div>
+      <div class="bg-white rounded-xl shadow-sm p-6 card-hover flex items-center justify-between">
+        <div>
+          <p class="text-sm text-gray-500 font-medium">总订阅数</p>
+          <p class="text-2xl font-bold text-gray-800" id="totalCount">-</p>
+        </div>
+        <div class="gauge" id="gauge-total">
+          <div class="gauge-center"><span id="gauge-total-text">0%</span></div>
         </div>
       </div>
-      <div class="bg-white rounded-xl shadow-sm p-6 card-hover border-l-4 border-green-500">
-        <div class="flex items-center">
-          <div class="p-3 rounded-full bg-green-100 text-green-500">
-            <i class="fas fa-check-circle text-xl"></i>
-          </div>
-          <div class="ml-4">
-            <p class="text-sm text-gray-500 font-medium">活跃订阅</p>
-            <p class="text-2xl font-bold text-gray-800" id="activeCount">-</p>
-          </div>
+      <div class="bg-white rounded-xl shadow-sm p-6 card-hover flex items-center justify-between">
+        <div>
+          <p class="text-sm text-gray-500 font-medium">活跃订阅</p>
+          <p class="text-2xl font-bold text-gray-800" id="activeCount">-</p>
+        </div>
+        <div class="gauge" id="gauge-active">
+          <div class="gauge-center"><span id="gauge-active-text">0%</span></div>
         </div>
       </div>
-      <div class="bg-white rounded-xl shadow-sm p-6 card-hover border-l-4 border-yellow-500">
-        <div class="flex items-center">
-          <div class="p-3 rounded-full bg-yellow-100 text-yellow-500">
-            <i class="fas fa-clock text-xl"></i>
-          </div>
-          <div class="ml-4">
-            <p class="text-sm text-gray-500 font-medium">即将到期(7天)</p>
-            <p class="text-2xl font-bold text-gray-800" id="expiringCount">-</p>
-          </div>
+      <div class="bg-white rounded-xl shadow-sm p-6 card-hover flex items-center justify-between">
+        <div>
+          <p class="text-sm text-gray-500 font-medium">即将到期(7天)</p>
+          <p class="text-2xl font-bold text-gray-800" id="expiringCount">-</p>
+        </div>
+        <div class="gauge" id="gauge-expiring">
+          <div class="gauge-center"><span id="gauge-expiring-text">0%</span></div>
         </div>
       </div>
-      <div class="bg-white rounded-xl shadow-sm p-6 card-hover border-l-4 border-blue-500">
-        <div class="flex items-center">
-          <div class="p-3 rounded-full bg-blue-100 text-blue-500">
-            <i class="fas fa-wallet text-xl"></i>
-          </div>
-          <div class="ml-4">
-            <p class="text-sm text-gray-500 font-medium">本月预估支出</p>
-            <p class="text-2xl font-bold text-gray-800" id="monthlyExpense">-</p>
-          </div>
+      <div class="bg-white rounded-xl shadow-sm p-6 card-hover flex items-center justify-between">
+        <div>
+          <p class="text-sm text-gray-500 font-medium">本月预估支出</p>
+          <p class="text-2xl font-bold text-gray-800" id="monthlyExpense">-</p>
+        </div>
+        <div class="gauge" id="gauge-expense">
+          <div class="gauge-center"><span id="gauge-expense-text">0%</span></div>
         </div>
       </div>
     </div>
@@ -287,6 +281,11 @@ export const adminPage = `
               <div id="expiryDateCalendar" class="calendar-grid"></div>
             </div>
           </div>
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">金额（每周期，¥）</label>
+          <input type="number" id="price" min="0" step="0.01" placeholder="例如 29.90" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
         </div>
         
         <div class="flex items-center space-x-4 bg-gray-50 p-3 rounded-lg">
@@ -699,7 +698,45 @@ export const adminPage = `
         document.getElementById('totalCount').textContent = total;
         document.getElementById('activeCount').textContent = active;
         document.getElementById('expiringCount').textContent = expiring;
-        document.getElementById('monthlyExpense').textContent = '¥0'; 
+        
+        let monthly = 0;
+        subscriptions.forEach(s => {
+          if (s.isActive === false) return;
+          if (s.price === undefined || isNaN(Number(s.price))) return;
+          const price = Number(s.price);
+          const val = s.periodValue || 1;
+          const unit = s.periodUnit || 'month';
+          if (unit === 'month') monthly += price / Math.max(1, val);
+          else if (unit === 'year') monthly += price / Math.max(1, val * 12);
+          else if (unit === 'day') monthly += price * (30 / Math.max(1, val));
+        });
+        document.getElementById('monthlyExpense').textContent = '¥' + monthly.toFixed(2); 
+        
+        const totalPercent = Math.min(100, Math.round((total / 50) * 100));
+        const activePercent = total > 0 ? Math.round((active / total) * 100) : 0;
+        const expiringPercent = total > 0 ? Math.round((expiring / total) * 100) : 0;
+        const expensePercent = Math.min(100, Math.round((monthly / 2000) * 100));
+        
+        setGauge('gauge-total', totalPercent, pickColor(totalPercent));
+        setGauge('gauge-active', activePercent, pickColor(activePercent));
+        setGauge('gauge-expiring', expiringPercent, expiringPercent > 0 ? '#f59e0b' : '#10b981');
+        setGauge('gauge-expense', expensePercent, '#3b82f6');
+    }
+    
+    function setGauge(id, percent, color) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const deg = Math.max(0, Math.min(360, Math.round(percent * 3.6)));
+      el.style.setProperty('--gauge-deg', deg + 'deg');
+      el.style.setProperty('--gauge-color', color);
+      const textEl = document.getElementById(id + '-text');
+      if (textEl) textEl.textContent = Math.max(0, Math.min(100, Math.round(percent))) + '%';
+    }
+    
+    function pickColor(percent) {
+      if (percent >= 67) return '#10b981';
+      if (percent >= 34) return '#f59e0b';
+      return '#ef4444';
     }
     
     // Modal Functions
@@ -721,6 +758,8 @@ export const adminPage = `
       document.getElementById('periodValue').value = 1;
       document.getElementById('periodUnit').value = 'month';
       document.getElementById('reminderDays').value = 7;
+      const priceEl = document.getElementById('price');
+      if (priceEl) priceEl.value = '';
       
       if (id) {
           const sub = subscriptions.find(s => s.id === id);
@@ -738,6 +777,7 @@ export const adminPage = `
              document.getElementById('periodUnit').value = sub.periodUnit || 'month';
              document.getElementById('reminderDays').value = sub.reminderDays !== undefined ? sub.reminderDays : 7;
              document.getElementById('useLunar').checked = !!sub.useLunar;
+             if (priceEl) priceEl.value = sub.price !== undefined ? String(sub.price) : '';
           }
       }
       
@@ -778,7 +818,8 @@ export const adminPage = `
         periodValue: parseInt(document.getElementById('periodValue').value),
         periodUnit: document.getElementById('periodUnit').value,
         reminderDays: parseInt(document.getElementById('reminderDays').value),
-        useLunar: document.getElementById('useLunar').checked
+        useLunar: document.getElementById('useLunar').checked,
+        price: (function(){ const v = document.getElementById('price').value; return v ? parseFloat(v) : undefined; })()
       };
       
       const btn = e.target.querySelector('button[type="submit"]');
