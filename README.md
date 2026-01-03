@@ -28,6 +28,11 @@
 - 默认管理员凭据更新为 `admin / password`，并提供本地预览重置接口 `/api/dev/reset-login`
 - KV 与部署命令适配 Wrangler v4 语法（示例见下方）
 - 订阅自动续期与到期计算的稳定性改进；UI 日历完善农历展示
+- 每日到期提醒支持多时段（如早/中/晚或任意 HH:mm），在配置页新增“每日提醒时段”，按设定时区匹配触发；未配置时默认 08:00
+- 定时任务策略更新：将计划任务配置为每分钟触发，并在代码中按配置的时段过滤执行，确保灵活提醒频率且避免非时段运行的推送
+- 修复手机端登录：调整 Cookie SameSite 为 Lax，并在前端所有请求加入 `credentials: 'include'`，兼容微信/Safari 等移动浏览器
+- 移动端性能优化：增加 CDN 预连接、Font Awesome 异步加载、隐藏未启用的配置区块、使用 content-visibility 优化首屏渲染
+- 配置中心增强：支持通过 Web UI 保存 `REMINDER_TIMES` 到 KV，后端按 `Config.reminderTimes` 解析执行
 
 ## 📥 CSV 导入说明
 
