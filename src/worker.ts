@@ -326,7 +326,7 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
                 userid: body.WENOTIFY_USERID || config.wenotify?.userid || '',
                 templateId: body.WENOTIFY_TEMPLATE_ID || config.wenotify?.templateId || ''
             };
-            success = await sendWeNotifyEdgeNotification('测试通知', '测试通知...', tempConfig);
+            success = await sendWeNotifyEdgeNotification('测试通知', '测试通知...', tempConfig, true);
         } else if (body.type === 'webhook') {
             tempConfig.webhook = {
                 url: body.WEBHOOK_URL || config.webhook?.url || '',

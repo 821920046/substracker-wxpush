@@ -202,14 +202,29 @@ export async function sendNotifyXNotification(title: string, content: string, de
 }
 
 // WeNotify Edge
-export async function sendWeNotifyEdgeNotification(title: string, content: string, config: Config): Promise<boolean> {
+export async function sendWeNotifyEdgeNotification(title: string, content: string, config: Config, throwOnError = false): Promise<boolean> {
   try {
     if (!config.wenotify?.url || !config.wenotify?.token) {
-      console.error('[WeNotify Edge] 通知未配置，缺少服务地址或Token');
+      const msg = '[WeNotify Edge] 通知未配置，缺少服务地址或Token';
+      console.error(msg);
+      if (throwOnError) throw new Error(msg);
       return false;
     }
     let base = config.wenotify.url.trim().replace(/\/+$/, '');
-    let url = base.endsWith('/wxsend') ? base : base + '/wxsend';
+    let url = base;
+    
+    // 智能 URL 处理：如果用户只提供了域名（根路径），则自动追加 /wxsend
+    // 如果用户提供了具体路径（如 /api/send），则保留原样
+    try {
+      const urlObj = new URL(base);
+      if (urlObj.pathname === '/' || urlObj.pathname === '') {
+        url = base + '/wxsend';
+      }
+    } catch (e) {
+      // URL 解析失败，回退到旧逻辑
+      url = base.endsWith('/wxsend') ? base : base + '/wxsend';
+    }
+
     const body: any = {
       title: title,
       content: content
@@ -228,9 +243,18 @@ export async function sendWeNotifyEdgeNotification(title: string, content: strin
       },
       body: JSON.stringify(body)
     }, 2, 8000);
-    return response.ok;
-  } catch (error) {
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      const errorMsg = `HTTP ${response.status}: ${errorText}`;
+      console.error(`[WeNotify Edge] 发送失败: ${errorMsg}`);
+      if (throwOnError) throw new Error(errorMsg);
+      return false;
+    }
+    return true;
+  } catch (error: any) {
     console.error('[WeNotify Edge] 发送通知失败:', error);
+    if (throwOnError) throw error;
     return false;
   }
 }
