@@ -60,7 +60,7 @@ jobs:
         run: |
           ID=$(grep -Po '^\s*id\s*=\s*"\K[^"]+' wrangler.toml | head -n 1)
           echo "KV ID in wrangler.toml: $ID"
-          wrangler kv namespace list --json > kv.json
+          wrangler kv namespace list > kv.json
           if ! grep -q "$ID" kv.json; then
             echo "KV ID $ID not found in your account namespaces. Please set CF_KV_ID secret or update wrangler.toml to a valid namespace ID."
             echo "Namespaces:"
