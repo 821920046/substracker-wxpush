@@ -95,6 +95,14 @@ export const adminPage = `
     .hover-tooltip.tooltip-above::before { top: auto; bottom: -6px; border-bottom: none; border-top: 6px solid #1f2937; }
     .gauge { width: 96px; height: 96px; border-radius: 50%; background: conic-gradient(var(--gauge-color, #10b981) var(--gauge-deg, 0deg), #e5e7eb 0deg); display: grid; place-items: center; position: relative; }
     .gauge-center { width: 68px; height: 68px; border-radius: 50%; background: white; display: grid; place-items: center; color: #374151; font-size: 0.9rem; font-weight: 600; box-shadow: inset 0 0 0 1px #e5e7eb; }
+    
+    @media (max-width: 640px) {
+      .grid.grid-cols-2 { grid-template-columns: 1fr !important; }
+      input, select, textarea { font-size: 16px; padding: 12px; }
+      #subscriptionModal .max-w-xl { max-width: 95vw; }
+      nav .h-16 { height: 56px; }
+      #subscriptionModal .p-5 { padding: 16px; }
+    }
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen font-sans">
@@ -110,6 +118,9 @@ export const adminPage = `
           <a href="/admin/config" class="text-gray-600 hover:text-indigo-600 px-3 py-2 rounded-md text-sm font-medium transition duration-150">
             <i class="fas fa-cog mr-1"></i>系统配置
           </a>
+          <button onclick="openFailureLogs()" class="text-gray-600 hover:text-indigo-600 px-3 py-2 rounded-md text-sm font-medium transition duration-150">
+            <i class="fas fa-exclamation-triangle mr-1"></i>失败日志
+          </button>
           <form action="/api/logout" method="POST" class="inline">
             <button type="submit" class="text-gray-600 hover:text-red-500 px-3 py-2 rounded-md text-sm font-medium transition duration-150">
               <i class="fas fa-sign-out-alt mr-1"></i>退出
@@ -335,7 +346,8 @@ export const adminPage = `
 
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">备注信息</label>
-          <textarea id="notes" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+          <textarea id="notes" rows="3" maxlength="200" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" style="overflow-y:auto; max-height:120px;"></textarea>
+          <div id="notesCounter" class="text-xs text-gray-500 mt-1">0/200</div>
         </div>
         
         <div class="grid grid-cols-2 gap-4">
@@ -345,8 +357,9 @@ export const adminPage = `
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">当天重复提醒时段</label>
-            <input type="text" id="dailyReminderTimes" placeholder="08:00,12:00,18:00" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <p class="mt-1 text-xs text-gray-500">仅对该订阅生效，优先级高于全局“每日提醒时段”。格式 HH:mm，多个用逗号分隔</p>
+            <input type="text" id="dailyReminderTimes" placeholder="08:00,12:00,18:00" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" aria-describedby="dailyReminderHelp">
+            <p id="dailyReminderHelp" class="mt-1 text-xs text-gray-500">仅对该订阅生效，优先级高于全局“每日提醒时段”。格式 HH:mm，多个用逗号分隔</p>
+            <p id="dailyReminderError" class="mt-1 text-xs text-red-600 hidden">格式错误，请使用 HH:mm，例如 08:00,12:30</p>
           </div>
           <div class="flex items-end space-x-4 pb-2">
             <div class="flex items-center">
@@ -365,6 +378,39 @@ export const adminPage = `
           <button type="submit" class="btn-primary px-6 py-2 text-white rounded-lg shadow-md font-medium">保存订阅</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div id="failureLogsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+    <div class="relative mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-xl bg-white">
+      <div class="flex justify-between items-center mb-5 pb-3 border-b">
+        <h3 class="text-xl font-bold text-gray-900">失败日志</h3>
+        <div class="flex items-center space-x-3">
+          <button id="refreshFailureLogs" class="text-gray-600 hover:text-indigo-600 px-3 py-1 rounded-md text-sm border">刷新</button>
+          <button id="closeFailureLogs" class="text-gray-400 hover:text-gray-600 transition duration-150">
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">时间</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">标题</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">失败渠道</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">成功渠道</th>
+            </tr>
+          </thead>
+          <tbody id="failureLogsBody" class="bg-white divide-y divide-gray-200">
+            <tr>
+              <td colspan="4" class="px-6 py-10 text-center text-gray-500">
+                <i class="fas fa-spinner fa-spin mr-2"></i>加载中...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -907,8 +953,8 @@ export const adminPage = `
           
           tr.innerHTML = \`
             <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm font-medium text-gray-900">\${sub.name}</div>
-                \${sub.notes ? \`<div class="text-xs text-gray-500">\${sub.notes}</div>\` : ''}
+                <div class="text-sm font-medium text-gray-900">${sub.name}</div>
+                ${sub.notes ? `<div class="text-xs text-gray-500" title="${sub.notes.replace(/"/g,'&quot;')}">${sub.notes.length > 60 ? sub.notes.slice(0,60) + '…' : sub.notes}</div>` : ''}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${sub.customType || '-'}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${sub.periodValue}\${unitMap[sub.periodUnit]}</td>
@@ -1053,6 +1099,7 @@ export const adminPage = `
     window.deleteSubscription = deleteSubscription;
     window.toggleStatus = toggleStatus;
     window.testNotify = testNotify;
+    window.openFailureLogs = openFailureLogs;
     
     document.getElementById('closeModal').addEventListener('click', () => {
       document.getElementById('subscriptionModal').classList.add('hidden');
@@ -1061,10 +1108,21 @@ export const adminPage = `
     document.getElementById('cancelBtn').addEventListener('click', () => {
       document.getElementById('subscriptionModal').classList.add('hidden');
     });
+    document.getElementById('closeFailureLogs').addEventListener('click', () => {
+      document.getElementById('failureLogsModal').classList.add('hidden');
+    });
+    document.getElementById('refreshFailureLogs').addEventListener('click', () => {
+      loadFailureLogs();
+    });
     
     // Form Submit
     document.getElementById('subscriptionForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      // Validate times first
+      if (!validateDailyTimes()) {
+        showToast('当天重复提醒时段格式错误，请按 HH:mm 重新输入', 'error');
+        return;
+      }
       const id = document.getElementById('subscriptionId').value;
       const data = {
         name: document.getElementById('name').value,
@@ -1107,6 +1165,37 @@ export const adminPage = `
         btn.disabled = false;
       }
     });
+    
+    function validateDailyTimes() {
+      const input = document.getElementById('dailyReminderTimes');
+      const err = document.getElementById('dailyReminderError');
+      const val = (input.value || '').trim();
+      if (!val) {
+        // empty allowed: means use global times
+        input.classList.remove('border-red-500');
+        if (err) err.classList.add('hidden');
+        return true;
+      }
+      const parts = val.split(',').map(s => s.trim()).filter(s => s.length > 0);
+      const re = /^([01]\d|2[0-3]):([0-5]\d)$/;
+      const ok = parts.every(p => re.test(p));
+      if (!ok) {
+        input.classList.add('border-red-500');
+        if (err) err.classList.remove('hidden');
+      } else {
+        input.classList.remove('border-red-500');
+        if (err) err.classList.add('hidden');
+      }
+      return ok;
+    }
+    const timesEl = document.getElementById('dailyReminderTimes');
+    if (timesEl) {
+      timesEl.addEventListener('blur', validateDailyTimes);
+      timesEl.addEventListener('input', () => {
+        // live feedback but don't block typing
+        validateDailyTimes();
+      });
+    }
     
     // Actions
     async function deleteSubscription(id) {
@@ -1158,6 +1247,41 @@ export const adminPage = `
         } catch (e) {
             showToast('发送失败', 'error');
         }
+    }
+    
+    async function loadFailureLogs() {
+      const tbody = document.getElementById('failureLogsBody');
+      if (!tbody) return;
+      tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-10 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>加载中...</td></tr>';
+      try {
+        const res = await fetch('/api/failure-logs?limit=50', { credentials: 'include' });
+        const items = await res.json();
+        if (!Array.isArray(items) || items.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-6 text-center text-gray-500">暂无失败记录</td></tr>';
+          return;
+        }
+        tbody.innerHTML = '';
+        items.forEach(item => {
+          const ts = item.timestamp || new Date(item.id || Date.now()).toISOString();
+          const timeStr = new Date(ts).toLocaleString();
+          const fails = (item.failures || []).map((f:any) => f.channel).join(', ');
+          const succs = (item.successes || []).map((s:any) => s.channel).join(', ');
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${timeStr}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${item.title || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-red-600">${fails || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-green-600">${succs || '-'}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-6 text-center text-red-500">加载失败</td></tr>';
+      }
+    }
+    function openFailureLogs() {
+      document.getElementById('failureLogsModal').classList.remove('hidden');
+      loadFailureLogs();
     }
     
     // Helpers
@@ -1265,6 +1389,21 @@ export const adminPage = `
       }
       updateTime();
       setInterval(updateTime, 1000);
+      
+      const notesEl = document.getElementById('notes');
+      const notesCounter = document.getElementById('notesCounter');
+      function updateNotesCounter() {
+        if (!notesEl || !notesCounter) return;
+        const len = (notesEl.value || '').length;
+        notesCounter.textContent = `${len}/200`;
+        if (len > 200) {
+          showToast('备注最多200字', 'warning');
+        }
+      }
+      if (notesEl) {
+        notesEl.addEventListener('input', updateNotesCounter);
+        updateNotesCounter();
+      }
     });
   </script>
 </body>

@@ -105,45 +105,101 @@ export async function sendNotificationToAllChannels(title: string, commonContent
         return;
     }
 
+    const results: { channel: string; success: boolean }[] = [];
+
     if (config.enabledNotifiers.includes('notifyx')) {
         const notifyxContent = `## ${title}\n\n${commonContent}`;
         const success = await sendNotifyXNotification(title, notifyxContent, `订阅提醒`, config);
+        results.push({ channel: 'notifyx', success });
         console.log(`${logPrefix} 发送NotifyX通知 ${success ? '成功' : '失败'}`);
     }
     if (config.enabledNotifiers.includes('wenotify')) {
         const wenotifyContent = commonContent.replace(/(\**|\*|##|#|`)/g, '');
         const success = await sendWeNotifyEdgeNotification(title, wenotifyContent, config);
+        results.push({ channel: 'wenotify', success });
         console.log(`${logPrefix} 发送WeNotify Edge通知 ${success ? '成功' : '失败'}`);
     }
     if (config.enabledNotifiers.includes('wechatOfficialAccount')) {
         const content = commonContent.replace(/(\**|\*|##|#|`)/g, '');
         const success = await sendWeChatOfficialAccountNotification(title, content, config, env);
+        results.push({ channel: 'wechatOfficialAccount', success });
         console.log(`${logPrefix} 发送微信公众号通知 ${success ? '成功' : '失败'}`);
     }
     if (config.enabledNotifiers.includes('telegram')) {
         const telegramContent = `*${title}*\n\n${commonContent}`;
         const success = await sendTelegramNotification(telegramContent, config);
+        results.push({ channel: 'telegram', success });
         console.log(`${logPrefix} 发送Telegram通知 ${success ? '成功' : '失败'}`);
     }
     if (config.enabledNotifiers.includes('webhook')) {
         const webhookContent = commonContent.replace(/(\**|\*|##|#|`)/g, '');
         const success = await sendWebhookNotification(title, webhookContent, config);
+        results.push({ channel: 'webhook', success });
         console.log(`${logPrefix} 发送企业微信应用通知 ${success ? '成功' : '失败'}`);
     }
     if (config.enabledNotifiers.includes('wechatbot')) {
         const wechatbotContent = commonContent.replace(/(\**|\*|##|#|`)/g, '');
         const success = await sendWechatBotNotification(title, wechatbotContent, config);
+        results.push({ channel: 'wechatbot', success });
         console.log(`${logPrefix} 发送企业微信机器人通知 ${success ? '成功' : '失败'}`);
     }
     if (config.enabledNotifiers.includes('email')) {
         const emailContent = commonContent.replace(/(\**|\*|##|#|`)/g, '');
         const success = await sendEmailNotification(title, emailContent, config);
+        results.push({ channel: 'email', success });
         console.log(`${logPrefix} 发送邮件通知 ${success ? '成功' : '失败'}`);
     }
     if (config.enabledNotifiers.includes('bark')) {
         const barkContent = commonContent.replace(/(\**|\*|##|#|`)/g, '');
         const success = await sendBarkNotification(title, barkContent, config);
+        results.push({ channel: 'bark', success });
         console.log(`${logPrefix} 发送Bark通知 ${success ? '成功' : '失败'}`);
+    }
+
+    const failures = results.filter(r => !r.success);
+    if (failures.length > 0 && env?.SUBSCRIPTIONS_KV) {
+        const payload: any = {
+            timestamp: new Date().toISOString(),
+            title,
+            failures,
+            successes: results.filter(r => r.success)
+        };
+        try {
+            const id = Date.now();
+            const key = `reminder_failure_${id}`;
+            await env.SUBSCRIPTIONS_KV.put(key, JSON.stringify(payload));
+            const idxRaw = await env.SUBSCRIPTIONS_KV.get('reminder_failure_index');
+            let idx: any[] = [];
+            if (idxRaw) {
+                try { idx = JSON.parse(idxRaw) || []; } catch {}
+            }
+            idx.push({ key, id });
+            idx = idx.slice(-100);
+            await env.SUBSCRIPTIONS_KV.put('reminder_failure_index', JSON.stringify(idx));
+        } catch (e) {
+            console.error(`${logPrefix} 写入提醒失败日志到KV失败:`, e);
+        }
+        // try to alert admin using a primary available channel
+        const summary = `提醒发送失败渠道: ${failures.map(f => f.channel).join(', ')}`;
+        const alertTitle = '提醒发送失败';
+        const alertContent = `${summary}\n任务标题: ${title}\n时间: ${new Date().toLocaleString()}`;
+        try {
+            if (config.enabledNotifiers.includes('notifyx')) {
+                await sendNotifyXNotification(alertTitle, `## ${alertTitle}\n\n${alertContent}`, '系统警报', config);
+            } else if (config.enabledNotifiers.includes('wenotify')) {
+                await sendWeNotifyEdgeNotification(alertTitle, alertContent, config);
+            } else if (config.enabledNotifiers.includes('telegram')) {
+                await sendTelegramNotification(`*${alertTitle}*\n\n${alertContent}`, config);
+            } else if (config.enabledNotifiers.includes('wechatbot')) {
+                await sendWechatBotNotification(alertTitle, alertContent, config);
+            } else if (config.enabledNotifiers.includes('email')) {
+                await sendEmailNotification(alertTitle, alertContent, config);
+            } else if (config.enabledNotifiers.includes('bark')) {
+                await sendBarkNotification(alertTitle, alertContent, config);
+            }
+        } catch (e) {
+            console.error(`${logPrefix} 管理员告警发送失败:`, e);
+        }
     }
 }
 

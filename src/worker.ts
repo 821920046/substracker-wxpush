@@ -314,6 +314,30 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
     }
   }
 
+  if (path === '/failure-logs' && method === 'GET') {
+    try {
+      const idxRaw = await env.SUBSCRIPTIONS_KV.get('reminder_failure_index');
+      let idx: any[] = [];
+      if (idxRaw) {
+        try { idx = JSON.parse(idxRaw) || []; } catch {}
+      }
+      const limit = parseInt(url.searchParams.get('limit') || '50');
+      const keys = idx.slice(-limit).reverse();
+      const out: any[] = [];
+      for (const item of keys) {
+        const raw = await env.SUBSCRIPTIONS_KV.get(item.key);
+        if (!raw) continue;
+        try {
+          const obj = JSON.parse(raw);
+          out.push({ key: item.key, id: item.id, ...obj });
+        } catch {}
+      }
+      return new Response(JSON.stringify(out), { headers: { 'Content-Type': 'application/json' } });
+    } catch (e: any) {
+      return new Response(JSON.stringify({ success: false, message: e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    }
+  }
+
   // Test Notification API
   if (path === '/test-notification' && method === 'POST') {
     try {
