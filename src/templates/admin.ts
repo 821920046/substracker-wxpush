@@ -953,8 +953,8 @@ export const adminPage = `
           
           tr.innerHTML = \`
             <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm font-medium text-gray-900">${sub.name}</div>
-                ${sub.notes ? `<div class="text-xs text-gray-500" title="${sub.notes.replace(/"/g,'&quot;')}">${sub.notes.length > 60 ? sub.notes.slice(0,60) + '…' : sub.notes}</div>` : ''}
+                <div class="text-sm font-medium text-gray-900">\${sub.name}</div>
+                \${sub.notes ? \`<div class="text-xs text-gray-500" title="\${sub.notes.replace(/"/g,'&quot;')}">\${sub.notes.length > 60 ? sub.notes.slice(0,60) + '…' : sub.notes}</div>\` : ''}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${sub.customType || '-'}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${sub.periodValue}\${unitMap[sub.periodUnit]}</td>
