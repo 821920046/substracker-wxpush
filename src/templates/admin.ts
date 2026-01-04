@@ -1267,12 +1267,12 @@ export const adminPage = `
           const fails = (item.failures || []).map((f:any) => f.channel).join(', ');
           const succs = (item.successes || []).map((s:any) => s.channel).join(', ');
           const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${timeStr}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${item.title || '-'}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-red-600">${fails || '-'}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-green-600">${succs || '-'}</td>
-          `;
+          tr.innerHTML = \`
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${timeStr}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">\${item.title || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-red-600">\${fails || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-green-600">\${succs || '-'}</td>
+          \`;
           tbody.appendChild(tr);
         });
       } catch (e) {
