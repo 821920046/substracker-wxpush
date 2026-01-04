@@ -1264,8 +1264,8 @@ export const adminPage = `
         items.forEach(item => {
           const ts = item.timestamp || new Date(item.id || Date.now()).toISOString();
           const timeStr = new Date(ts).toLocaleString();
-          const fails = (item.failures || []).map((f:any) => f.channel).join(', ');
-          const succs = (item.successes || []).map((s:any) => s.channel).join(', ');
+          const fails = (item.failures || []).map(f => f.channel).join(', ');
+          const succs = (item.successes || []).map(s => s.channel).join(', ');
           const tr = document.createElement('tr');
           tr.innerHTML = \`
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${timeStr}</td>
