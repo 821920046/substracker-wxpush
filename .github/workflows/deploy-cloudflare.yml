@@ -24,9 +24,47 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: kv namespace list
+          command: kv namespace list --json
+      - name: Validate secrets presence
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CF_TOKEN" ]; then echo "Missing CLOUDFLARE_API_TOKEN secret"; exit 1; fi
+          if [ -z "$CF_ACCOUNT" ]; then echo "Missing CLOUDFLARE_ACCOUNT_ID secret"; exit 1; fi
+      - name: Optional inject KV ID from secret
+        env:
+          CF_KV_ID: ${{ secrets.CF_KV_ID }}
+        run: |
+          echo "::group::wrangler.toml before injection"
+          cat wrangler.toml || true
+          echo "::endgroup::"
+          if [ -n "$CF_KV_ID" ]; then
+            perl -0777 -pe 's/\[\[kv_namespaces\]\]\s*binding\s*=\s*"SUBSCRIPTIONS_KV"\s*id\s*=\s*"[^\"]*"/[[kv_namespaces]]\nbinding = "SUBSCRIPTIONS_KV"\nid = "'$CF_KV_ID'"/sm' -i wrangler.toml
+            echo "Injected KV ID from secrets into wrangler.toml"
+          fi
+          echo "::group::wrangler.toml after injection"
+          cat wrangler.toml || true
+          echo "::endgroup::"
+      - name: Validate KV ID exists in account
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: kv namespace list --json
+      - name: Check KV binding matches namespace list
+        run: |
+          ID=$(grep -Po '^\s*id\s*=\s*"\K[^"]+' wrangler.toml | head -n 1)
+          echo "KV ID in wrangler.toml: $ID"
+          npx wrangler kv namespace list --json > kv.json
+          if ! grep -q "$ID" kv.json; then
+            echo "KV ID $ID not found in your account namespaces. Please set CF_KV_ID secret or update wrangler.toml to a valid namespace ID."
+            echo "Namespaces:"
+            cat kv.json
+            exit 1
+          fi
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --env production
+          command: deploy --env production --log-level debug
