@@ -20,11 +20,12 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: whoami
       - name: Preflight - list KV namespaces
+        continue-on-error: true
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: kv namespace list --json
+          command: kv:namespace list --json
       - name: Validate secrets presence
         env:
           CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -46,17 +47,17 @@ jobs:
           echo "::group::wrangler.toml after injection"
           cat wrangler.toml || true
           echo "::endgroup::"
-      - name: Validate KV ID exists in account
-        uses: cloudflare/wrangler-action@v3
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: kv namespace list --json
+          node-version: '20'
+      - name: Install Wrangler CLI
+        run: npm i -g wrangler@latest
       - name: Check KV binding matches namespace list
         run: |
           ID=$(grep -Po '^\s*id\s*=\s*"\K[^"]+' wrangler.toml | head -n 1)
           echo "KV ID in wrangler.toml: $ID"
-          npx wrangler kv namespace list --json > kv.json
+          wrangler kv:namespace list --json > kv.json
           if ! grep -q "$ID" kv.json; then
             echo "KV ID $ID not found in your account namespaces. Please set CF_KV_ID secret or update wrangler.toml to a valid namespace ID."
             echo "Namespaces:"
