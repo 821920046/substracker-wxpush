@@ -1395,7 +1395,7 @@ export const adminPage = `
       function updateNotesCounter() {
         if (!notesEl || !notesCounter) return;
         const len = (notesEl.value || '').length;
-        notesCounter.textContent = `${len}/200`;
+        notesCounter.textContent = \`\${len}/200\`;
         if (len > 200) {
           showToast('备注最多200字', 'warning');
         }
