@@ -18,6 +18,13 @@ ENVIRONMENT = "production"
 
 [env.production]
 name = "subscription-manager"
+  
+  [env.production.vars]
+  ENVIRONMENT = "production"
+  
+  [[env.production.kv_namespaces]]
+  binding = "SUBSCRIPTIONS_KV"
+  id = "a2827759fb114eb682d59a426c4c85b5"
 
 [env.staging]
 name = "subscription-manager-staging"
