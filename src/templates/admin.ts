@@ -1172,14 +1172,25 @@ export const adminPage = `
     
     function normalizeTimeStr(val) {
       if (!val) return '';
-      // Remove all spaces first
+      // 1. To Half-width chars
+      val = val.replace(/[\uFF01-\uFF5E]/g, function(ch) { return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0); });
+      
+      // 2. Remove all whitespace
       val = val.replace(/\s+/g, '');
-      // Replace separators (Chinese comma, ideographic comma, Chinese semicolon, semicolon) -> comma
+      
+      // 3. Replace common separators with comma
       val = val.replace(/[，、；;]/g, ',');
-      // Replace time separators (Chinese colon, dot) -> colon
+      
+      // 4. Replace time separators
       val = val.replace(/[：\.]/g, ':');
-      // Replace full-width numbers
-      val = val.replace(/[\uFF10-\uFF19]/g, m => String.fromCharCode(m.charCodeAt(0) - 0xFEE0));
+      
+      // 5. Remove any character that is not digit, colon, or comma
+      val = val.replace(/[^0-9:,]/g, '');
+      
+      // 6. Deduplicate commas and trim
+      val = val.replace(/,+/g, ',');
+      val = val.replace(/^,+|,+$/g, '');
+      
       return val;
     }
 
@@ -1199,17 +1210,18 @@ export const adminPage = `
         return true;
       }
       
-      const parts = val.split(',').filter(s => s.length > 0);
-      // Relaxed regex + value check
-      // Allow H:mm or HH:mm
+      const parts = val.split(',');
+      let ok = true;
       const re = /^(\d{1,2}):(\d{2})$/;
-      const ok = parts.every(p => {
-        const match = p.match(re);
-        if (!match) return false;
-        const h = parseInt(match[1], 10);
-        const m = parseInt(match[2], 10);
-        return h >= 0 && h <= 23 && m >= 0 && m <= 59;
-      });
+      
+      for (const p of parts) {
+          if (!p) continue; 
+          const match = p.match(re);
+          if (!match) { ok = false; break; }
+          const h = parseInt(match[1], 10);
+          const m = parseInt(match[2], 10);
+          if (h < 0 || h > 23 || m < 0 || m > 59) { ok = false; break; }
+      }
       
       if (!ok) {
         input.classList.add('border-red-500');
