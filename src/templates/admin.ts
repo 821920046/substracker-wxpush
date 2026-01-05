@@ -177,8 +177,8 @@ export const adminPage = `
       <div class="px-6 py-4 border-b border-gray-100 bg-gray-50">
         <div class="flex flex-col md:flex-row md:justify-between md:items-center space-y-3 md:space-y-0">
           <h2 class="text-lg font-semibold text-gray-800"><i class="fas fa-tasks mr-2 text-indigo-500"></i>订阅列表</h2>
-          <div class="flex items-center space-x-3">
-            <input id="searchInput" type="text" placeholder="搜索名称或类型" class="w-48 md:w-64 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <div class="flex flex-wrap items-center gap-2">
+            <input id="searchInput" type="text" placeholder="搜索名称或类型" class="w-full sm:w-48 md:w-64 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
             <select id="sortSelect" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
               <option value="expiryDate">按到期时间</option>
               <option value="name">按名称</option>
@@ -194,15 +194,15 @@ export const adminPage = `
               <option value="expired">已过期</option>
               <option value="inactive">已停用</option>
             </select>
-            <button id="exportCsvBtn" class="px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-100" title="导出CSV">
+            <button id="exportCsvBtn" class="hidden sm:inline-block px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-100" title="导出CSV">
               导出CSV
             </button>
-            <label class="px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-100 cursor-pointer" title="导入CSV">
+            <label class="hidden sm:inline-block px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-100 cursor-pointer" title="导入CSV">
               导入CSV
               <input id="importCsvInput" type="file" accept=".csv,text/csv" class="hidden">
             </label>
           </div>
-          <button onclick="openModal()" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium shadow-md flex items-center">
+          <button onclick="openModal()" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium shadow-md flex items-center whitespace-nowrap">
             <i class="fas fa-plus mr-2"></i>添加订阅
           </button>
         </div>
@@ -212,12 +212,12 @@ export const adminPage = `
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
             <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">服务名称</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">类型</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">周期</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4 sm:w-auto">服务名称</th>
+              <th class="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">类型</th>
+              <th class="hidden sm:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">周期</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">到期时间</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">价格</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">月均支出</th>
+              <th class="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">价格</th>
+              <th class="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">月均支出</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
             </tr>
@@ -952,18 +952,18 @@ export const adminPage = `
           }
           
           tr.innerHTML = \`
-            <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm font-medium text-gray-900">\${sub.name}</div>
-                \${sub.notes ? \`<div class="text-xs text-gray-500" title="\${sub.notes.replace(/"/g,'&quot;')}">\${sub.notes.length > 60 ? sub.notes.slice(0,60) + '…' : sub.notes}</div>\` : ''}
+            <td class="px-6 py-4 whitespace-nowrap max-w-[120px] sm:max-w-[200px] md:max-w-xs overflow-hidden">
+                <div class="text-sm font-medium text-gray-900 truncate" title="${sub.name}">${sub.name}</div>
+                ${sub.notes ? `<div class="text-xs text-gray-500 truncate" title="${sub.notes.replace(/"/g,'&quot;')}">${sub.notes}</div>` : ''}
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${sub.customType || '-'}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${sub.periodValue}\${unitMap[sub.periodUnit]}</td>
+            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">${sub.customType || '-'}</td>
+            <td class="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">${sub.periodValue}${unitMap[sub.periodUnit]}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
               \${dateStr}
               <div class="text-xs text-gray-400" title="\${sub.useLunar ? '按农历周期滚动，显示为换算后的阳历日期' : '按公历周期滚动'}">\${sub.useLunar ? '农历' : '公历'}</div>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${priceStr}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${monthlyStr}</td>
+            <td class="hidden lg:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">${priceStr}</td>
+            <td class="hidden lg:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">${monthlyStr}</td>
             <td class="px-6 py-4 whitespace-nowrap">\${statusHtml}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
               <button onclick="openModal('\${sub.id}')" class="text-indigo-600 hover:text-indigo-900 mr-3"><i class="fas fa-edit"></i></button>
