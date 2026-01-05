@@ -1223,23 +1223,27 @@ export const adminPage = `
       const parts = val.split(',');
       let ok = true;
       let failReason = '';
-      // Regex: H:mm or HH:mm, strictly 0-23 and 00-59
-      const re = /^(\d{1,2}):(\d{2})$/;
-      
       for (const p of parts) {
-          if (!p) continue; 
-          const match = p.match(re);
-          if (!match) { 
-              ok = false; 
+          if (!p) continue;
+          const segs = p.split(':');
+          if (segs.length !== 2) {
+              ok = false;
               failReason = '格式错误: "' + p + '" (应为 HH:mm)';
-              break; 
+              break;
           }
-          const h = parseInt(match[1], 10);
-          const m = parseInt(match[2], 10);
-          if (h < 0 || h > 23 || m < 0 || m > 59) { 
-              ok = false; 
+          const hStr = segs[0];
+          const mStr = segs[1];
+          if (mStr.length !== 2 || hStr.length < 1 || hStr.length > 2) {
+              ok = false;
+              failReason = '格式错误: "' + p + '" (应为 HH:mm)';
+              break;
+          }
+          const h = parseInt(hStr, 10);
+          const m = parseInt(mStr, 10);
+          if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+              ok = false;
               failReason = '时间无效: "' + p + '" (00:00-23:59)';
-              break; 
+              break;
           }
       }
       
