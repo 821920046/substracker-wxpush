@@ -235,8 +235,8 @@ export const adminPage = `
   </div>
 
   <!-- Modal -->
-  <div id="subscriptionModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50 flex items-center justify-center">
-    <div class="relative mx-auto p-5 border w-full max-w-xl shadow-lg rounded-xl bg-white max-h-[90vh] overflow-y-auto">
+  <div id="subscriptionModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50 flex items-start sm:items-center justify-center pt-4 sm:pt-0">
+    <div class="relative mx-auto p-5 border w-full max-w-xl shadow-lg rounded-xl bg-white max-h-[85vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-5 pb-3 border-b">
         <h3 class="text-xl font-bold text-gray-900" id="modalTitle">添加订阅</h3>
         <button id="closeModal" class="text-gray-400 hover:text-gray-600 transition duration-150">
@@ -952,7 +952,7 @@ export const adminPage = `
           }
           
           tr.innerHTML = \`
-            <td class="px-6 py-4 whitespace-nowrap max-w-[120px] sm:max-w-[200px] md:max-w-xs overflow-hidden">
+            <td class="px-4 sm:px-6 py-4 whitespace-nowrap max-w-[80px] sm:max-w-[140px] md:max-w-[200px] overflow-hidden">
                 <div class="text-sm font-medium text-gray-900 truncate" title="\${sub.name}">\${sub.name}</div>
                 \${sub.notes ? \`<div class="text-xs text-gray-500 truncate" title="\${sub.notes.replace(/"/g,'&quot;')}">\${sub.notes}</div>\` : ''}
             </td>
@@ -1172,6 +1172,8 @@ export const adminPage = `
     
     function normalizeTimeStr(val) {
       if (!val) return '';
+      // Remove all spaces first
+      val = val.replace(/\s+/g, '');
       // Replace separators (Chinese comma, ideographic comma, Chinese semicolon, semicolon) -> comma
       val = val.replace(/[，、；;]/g, ',');
       // Replace time separators (Chinese colon, dot) -> colon
@@ -1184,10 +1186,11 @@ export const adminPage = `
     function validateDailyTimes() {
       const input = document.getElementById('dailyReminderTimes');
       const err = document.getElementById('dailyReminderError');
-      let val = (input.value || '').trim();
+      // Get raw value
+      let rawVal = (input.value || '').trim();
       
       // Normalize for validation check
-      val = normalizeTimeStr(val);
+      let val = normalizeTimeStr(rawVal);
       
       if (!val) {
         // empty allowed
@@ -1195,8 +1198,10 @@ export const adminPage = `
         if (err) err.classList.add('hidden');
         return true;
       }
-      const parts = val.split(',').map(s => s.trim()).filter(s => s.length > 0);
+      
+      const parts = val.split(',').filter(s => s.length > 0);
       // Relaxed regex + value check
+      // Allow H:mm or HH:mm
       const re = /^(\d{1,2}):(\d{2})$/;
       const ok = parts.every(p => {
         const match = p.match(re);
