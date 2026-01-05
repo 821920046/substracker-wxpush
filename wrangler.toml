@@ -3,21 +3,10 @@ main = "src/worker.ts"
 compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
 
-# KV 命名空间配置
-[[kv_namespaces]]
-binding = "SUBSCRIPTIONS_KV"
-id = "a2827759fb114eb682d59a426c4c85b5"
-
-# 定时任务配置 - 每天早上8点检查
-[triggers]
-crons = ["* * * * *"]
-
-# 环境变量（可选，也可以在 Cloudflare Dashboard 中设置）
-[vars]
-ENVIRONMENT = "production"
-
 [env.production]
 name = "subscription-manager"
+workers_dev = true
+preview_urls = true
   
   [env.production.vars]
   ENVIRONMENT = "production"
@@ -25,6 +14,9 @@ name = "subscription-manager"
   [[env.production.kv_namespaces]]
   binding = "SUBSCRIPTIONS_KV"
   id = "a2827759fb114eb682d59a426c4c85b5"
+  
+  [env.production.triggers]
+  crons = ["* * * * *"]
 
 [env.staging]
 name = "subscription-manager-staging"
