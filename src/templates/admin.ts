@@ -1137,7 +1137,7 @@ export const adminPage = `
         reminderDays: parseInt(document.getElementById('reminderDays').value),
         dailyReminderTimes: (function(){ 
           let v = document.getElementById('dailyReminderTimes').value.trim(); 
-          v = v.replace(/，/g, ',').replace(/：/g, ':');
+          v = normalizeTimeStr(v);
           return v ? v.split(',').map(s=>s.trim()).filter(s=>s.length>0) : []; 
         })(),
         useLunar: document.getElementById('useLunar').checked,
@@ -1170,23 +1170,42 @@ export const adminPage = `
       }
     });
     
+    function normalizeTimeStr(val) {
+      if (!val) return '';
+      // Replace separators (Chinese comma, ideographic comma, Chinese semicolon, semicolon) -> comma
+      val = val.replace(/[，、；;]/g, ',');
+      // Replace time separators (Chinese colon, dot) -> colon
+      val = val.replace(/[：\.]/g, ':');
+      // Replace full-width numbers
+      val = val.replace(/[\uFF10-\uFF19]/g, m => String.fromCharCode(m.charCodeAt(0) - 0xFEE0));
+      return val;
+    }
+
     function validateDailyTimes() {
       const input = document.getElementById('dailyReminderTimes');
       const err = document.getElementById('dailyReminderError');
       let val = (input.value || '').trim();
       
-      // Auto-fix separators for validation
-      val = val.replace(/，/g, ',').replace(/：/g, ':');
+      // Normalize for validation check
+      val = normalizeTimeStr(val);
       
       if (!val) {
-        // empty allowed: means use global times
+        // empty allowed
         input.classList.remove('border-red-500');
         if (err) err.classList.add('hidden');
         return true;
       }
       const parts = val.split(',').map(s => s.trim()).filter(s => s.length > 0);
-      const re = /^([0-1]?\d|2[0-3]):([0-5]\d)$/;
-      const ok = parts.every(p => re.test(p));
+      // Relaxed regex + value check
+      const re = /^(\d{1,2}):(\d{2})$/;
+      const ok = parts.every(p => {
+        const match = p.match(re);
+        if (!match) return false;
+        const h = parseInt(match[1], 10);
+        const m = parseInt(match[2], 10);
+        return h >= 0 && h <= 23 && m >= 0 && m <= 59;
+      });
+      
       if (!ok) {
         input.classList.add('border-red-500');
         if (err) err.classList.remove('hidden');
@@ -1196,11 +1215,19 @@ export const adminPage = `
       }
       return ok;
     }
+    
     const timesEl = document.getElementById('dailyReminderTimes');
     if (timesEl) {
-      timesEl.addEventListener('blur', validateDailyTimes);
+      timesEl.addEventListener('blur', () => {
+         // Auto-fix on blur
+         let val = timesEl.value;
+         if (val) {
+             const fixed = normalizeTimeStr(val);
+             if (fixed !== val) timesEl.value = fixed;
+         }
+         validateDailyTimes();
+      });
       timesEl.addEventListener('input', () => {
-        // live feedback but don't block typing
         validateDailyTimes();
       });
     }
