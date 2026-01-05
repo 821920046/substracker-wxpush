@@ -178,8 +178,8 @@ export const adminPage = `
         <div class="flex flex-col md:flex-row md:justify-between md:items-center space-y-3 md:space-y-0">
           <h2 class="text-lg font-semibold text-gray-800"><i class="fas fa-tasks mr-2 text-indigo-500"></i>订阅列表</h2>
           <div class="flex flex-wrap items-center gap-2">
-            <input id="searchInput" type="text" placeholder="搜索名称或类型" class="w-full sm:w-48 md:w-64 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <select id="sortSelect" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <input id="searchInput" type="text" placeholder="搜索名称或类型" class="w-full sm:w-48 md:w-64 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" aria-label="搜索订阅">
+            <select id="sortSelect" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" aria-label="排序方式">
               <option value="expiryDate">按到期时间</option>
               <option value="name">按名称</option>
               <option value="price">按价格</option>
@@ -187,7 +187,7 @@ export const adminPage = `
             <button id="sortDirBtn" class="px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-100" title="切换升序/降序">
               <i id="sortDirIcon" class="fas fa-arrow-down-a-z"></i>
             </button>
-            <select id="filterSelect" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <select id="filterSelect" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" aria-label="筛选状态">
               <option value="all">全部</option>
               <option value="active">活跃</option>
               <option value="expiring">即将到期(7天)</option>
@@ -244,27 +244,27 @@ export const adminPage = `
         </button>
       </div>
       
-      <form id="subscriptionForm" class="space-y-4">
+      <form id="subscriptionForm" class="space-y-4" autocomplete="off">
         <input type="hidden" id="subscriptionId">
         
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">服务名称</label>
-            <input type="text" id="name" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <label for="name" class="block text-sm font-medium text-gray-700 mb-1">服务名称</label>
+            <input type="text" id="name" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" autocomplete="off">
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">自定义类型</label>
-            <input type="text" id="customType" placeholder="如：影视会员" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <label for="customType" class="block text-sm font-medium text-gray-700 mb-1">自定义类型</label>
+            <input type="text" id="customType" placeholder="如：影视会员" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" autocomplete="off">
           </div>
         </div>
         
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">周期数值</label>
+            <label for="periodValue" class="block text-sm font-medium text-gray-700 mb-1">周期数值</label>
             <input type="number" id="periodValue" required min="1" value="1" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">周期单位</label>
+            <label for="periodUnit" class="block text-sm font-medium text-gray-700 mb-1">周期单位</label>
             <select id="periodUnit" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
               <option value="month">月</option>
               <option value="year">年</option>
@@ -275,8 +275,8 @@ export const adminPage = `
         
         <div class="grid grid-cols-2 gap-4">
           <div class="relative">
-            <label class="block text-sm font-medium text-gray-700 mb-1">开始日期</label>
-            <input type="text" id="startDate" required readonly class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer bg-white">
+            <label for="startDate" class="block text-sm font-medium text-gray-700 mb-1">开始日期</label>
+            <input type="text" id="startDate" required readonly class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer bg-white" autocomplete="off">
             <div id="startDateLunar" class="text-xs text-gray-500 mt-1 h-4"></div>
             
             <!-- Custom Date Picker -->
@@ -300,8 +300,8 @@ export const adminPage = `
           </div>
           
           <div class="relative">
-            <label class="block text-sm font-medium text-gray-700 mb-1">到期日期</label>
-            <input type="text" id="expiryDate" required readonly class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer bg-white">
+            <label for="expiryDate" class="block text-sm font-medium text-gray-700 mb-1">到期日期</label>
+            <input type="text" id="expiryDate" required readonly class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer bg-white" autocomplete="off">
             <div id="expiryDateLunar" class="text-xs text-gray-500 mt-1 h-4"></div>
             
             <!-- Custom Date Picker -->
@@ -326,7 +326,7 @@ export const adminPage = `
         </div>
         
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">金额（每周期，¥）</label>
+          <label for="price" class="block text-sm font-medium text-gray-700 mb-1">金额（每周期，¥）</label>
           <input type="number" id="price" min="0" step="0.01" placeholder="例如 29.90" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
         </div>
         
@@ -345,19 +345,19 @@ export const adminPage = `
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">备注信息</label>
+          <label for="notes" class="block text-sm font-medium text-gray-700 mb-1">备注信息</label>
           <textarea id="notes" rows="3" maxlength="200" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" style="overflow-y:auto; max-height:120px;"></textarea>
           <div id="notesCounter" class="text-xs text-gray-500 mt-1">0/200</div>
         </div>
         
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">提醒设置 (天)</label>
+            <label for="reminderDays" class="block text-sm font-medium text-gray-700 mb-1">提醒设置 (天)</label>
             <input type="number" id="reminderDays" min="0" value="7" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" title="提前多少天提醒，0表示仅当天提醒">
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">当天重复提醒时段</label>
-            <input type="text" id="dailyReminderTimes" placeholder="08:00,12:00,18:00" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" aria-describedby="dailyReminderHelp">
+            <label for="dailyReminderTimes" class="block text-sm font-medium text-gray-700 mb-1">当天重复提醒时段</label>
+            <input type="text" id="dailyReminderTimes" placeholder="08:00,12:00,18:00" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" aria-describedby="dailyReminderHelp" autocomplete="off">
             <p id="dailyReminderHelp" class="mt-1 text-xs text-gray-500">仅对该订阅生效，优先级高于全局“每日提醒时段”。格式 HH:mm，多个用逗号分隔</p>
             <p id="dailyReminderError" class="mt-1 text-xs text-red-600 hidden">格式错误，请使用 HH:mm，例如 08:00,12:30</p>
           </div>
