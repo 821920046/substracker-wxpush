@@ -953,17 +953,17 @@ export const adminPage = `
           
           tr.innerHTML = \`
             <td class="px-6 py-4 whitespace-nowrap max-w-[120px] sm:max-w-[200px] md:max-w-xs overflow-hidden">
-                <div class="text-sm font-medium text-gray-900 truncate" title="${sub.name}">${sub.name}</div>
-                ${sub.notes ? `<div class="text-xs text-gray-500 truncate" title="${sub.notes.replace(/"/g,'&quot;')}">${sub.notes}</div>` : ''}
+                <div class="text-sm font-medium text-gray-900 truncate" title="\${sub.name}">\${sub.name}</div>
+                \${sub.notes ? \`<div class="text-xs text-gray-500 truncate" title="\${sub.notes.replace(/"/g,'&quot;')}">\${sub.notes}</div>\` : ''}
             </td>
-            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">${sub.customType || '-'}</td>
-            <td class="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">${sub.periodValue}${unitMap[sub.periodUnit]}</td>
+            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${sub.customType || '-'}</td>
+            <td class="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${sub.periodValue}\${unitMap[sub.periodUnit]}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
               \${dateStr}
               <div class="text-xs text-gray-400" title="\${sub.useLunar ? '按农历周期滚动，显示为换算后的阳历日期' : '按公历周期滚动'}">\${sub.useLunar ? '农历' : '公历'}</div>
             </td>
-            <td class="hidden lg:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">${priceStr}</td>
-            <td class="hidden lg:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">${monthlyStr}</td>
+            <td class="hidden lg:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${priceStr}</td>
+            <td class="hidden lg:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${monthlyStr}</td>
             <td class="px-6 py-4 whitespace-nowrap">\${statusHtml}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
               <button onclick="openModal('\${sub.id}')" class="text-indigo-600 hover:text-indigo-900 mr-3"><i class="fas fa-edit"></i></button>
