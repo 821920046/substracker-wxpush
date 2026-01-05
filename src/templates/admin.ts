@@ -1231,14 +1231,14 @@ export const adminPage = `
           const match = p.match(re);
           if (!match) { 
               ok = false; 
-              failReason = `格式错误: "${p}" (应为 HH:mm)`;
+              failReason = '格式错误: "' + p + '" (应为 HH:mm)';
               break; 
           }
           const h = parseInt(match[1], 10);
           const m = parseInt(match[2], 10);
           if (h < 0 || h > 23 || m < 0 || m > 59) { 
               ok = false; 
-              failReason = `时间无效: "${p}" (00:00-23:59)`;
+              failReason = '时间无效: "' + p + '" (00:00-23:59)';
               break; 
           }
       }
