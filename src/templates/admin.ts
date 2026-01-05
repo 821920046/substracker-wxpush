@@ -236,7 +236,7 @@ export const adminPage = `
 
   <!-- Modal -->
   <div id="subscriptionModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50 flex items-center justify-center">
-    <div class="relative mx-auto p-5 border w-full max-w-xl shadow-lg rounded-xl bg-white">
+    <div class="relative mx-auto p-5 border w-full max-w-xl shadow-lg rounded-xl bg-white max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-5 pb-3 border-b">
         <h3 class="text-xl font-bold text-gray-900" id="modalTitle">添加订阅</h3>
         <button id="closeModal" class="text-gray-400 hover:text-gray-600 transition duration-150">
@@ -1135,7 +1135,11 @@ export const adminPage = `
         periodValue: parseInt(document.getElementById('periodValue').value),
         periodUnit: document.getElementById('periodUnit').value,
         reminderDays: parseInt(document.getElementById('reminderDays').value),
-        dailyReminderTimes: (function(){ const v = document.getElementById('dailyReminderTimes').value.trim(); return v ? v.split(',').map(s=>s.trim()).filter(s=>s.length>0) : []; })(),
+        dailyReminderTimes: (function(){ 
+          let v = document.getElementById('dailyReminderTimes').value.trim(); 
+          v = v.replace(/，/g, ',').replace(/：/g, ':');
+          return v ? v.split(',').map(s=>s.trim()).filter(s=>s.length>0) : []; 
+        })(),
         useLunar: document.getElementById('useLunar').checked,
         price: (function(){ const v = document.getElementById('price').value; return v ? parseFloat(v) : undefined; })()
       };
@@ -1169,7 +1173,11 @@ export const adminPage = `
     function validateDailyTimes() {
       const input = document.getElementById('dailyReminderTimes');
       const err = document.getElementById('dailyReminderError');
-      const val = (input.value || '').trim();
+      let val = (input.value || '').trim();
+      
+      // Auto-fix separators for validation
+      val = val.replace(/，/g, ',').replace(/：/g, ':');
+      
       if (!val) {
         // empty allowed: means use global times
         input.classList.remove('border-red-500');
@@ -1177,7 +1185,7 @@ export const adminPage = `
         return true;
       }
       const parts = val.split(',').map(s => s.trim()).filter(s => s.length > 0);
-      const re = /^([01]\d|2[0-3]):([0-5]\d)$/;
+      const re = /^([0-1]?\d|2[0-3]):([0-5]\d)$/;
       const ok = parts.every(p => re.test(p));
       if (!ok) {
         input.classList.add('border-red-500');

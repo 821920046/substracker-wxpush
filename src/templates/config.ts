@@ -626,7 +626,7 @@ export const configPage = `
         BARK_IS_ARCHIVE: document.getElementById('barkIsArchive').checked.toString(),
         ENABLED_NOTIFIERS: enabledNotifiers,
         TIMEZONE: document.getElementById('timezone').value.trim(),
-        REMINDER_TIMES: document.getElementById('reminderTimes').value.trim()
+        REMINDER_TIMES: document.getElementById('reminderTimes').value.trim().replace(/，/g, ',').replace(/：/g, ':')
       };
 
       const passwordField = document.getElementById('adminPassword');
