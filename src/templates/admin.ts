@@ -1194,38 +1194,63 @@ export const adminPage = `
       return val;
     }
 
-    function validateDailyTimes() {
+    function validateDailyTimes(showError = true) {
       const input = document.getElementById('dailyReminderTimes');
       const err = document.getElementById('dailyReminderError');
       // Get raw value
       let rawVal = (input.value || '').trim();
       
-      // Normalize for validation check
-      let val = normalizeTimeStr(rawVal);
-      
-      if (!val) {
-        // empty allowed
+      // If empty, it's valid
+      if (!rawVal) {
         input.classList.remove('border-red-500');
         if (err) err.classList.add('hidden');
         return true;
       }
+
+      // Normalize for validation check
+      let val = normalizeTimeStr(rawVal);
+      console.log('Validating time:', rawVal, '->', val);
+      
+      // If normalization results in empty string but rawVal wasn't empty (e.g. just commas), it's invalid if we want strictness, 
+      // but let's assume it means "clear".
+      if (!val) {
+         // This handles case where user typed just "   " or ",,,"
+         input.classList.remove('border-red-500');
+         if (err) err.classList.add('hidden');
+         return true;
+      }
       
       const parts = val.split(',');
       let ok = true;
+      let failReason = '';
+      // Regex: H:mm or HH:mm, strictly 0-23 and 00-59
       const re = /^(\d{1,2}):(\d{2})$/;
       
       for (const p of parts) {
           if (!p) continue; 
           const match = p.match(re);
-          if (!match) { ok = false; break; }
+          if (!match) { 
+              ok = false; 
+              failReason = `格式错误: "${p}" (应为 HH:mm)`;
+              break; 
+          }
           const h = parseInt(match[1], 10);
           const m = parseInt(match[2], 10);
-          if (h < 0 || h > 23 || m < 0 || m > 59) { ok = false; break; }
+          if (h < 0 || h > 23 || m < 0 || m > 59) { 
+              ok = false; 
+              failReason = `时间无效: "${p}" (00:00-23:59)`;
+              break; 
+          }
       }
       
       if (!ok) {
-        input.classList.add('border-red-500');
-        if (err) err.classList.remove('hidden');
+        if (showError) {
+            input.classList.add('border-red-500');
+            if (err) {
+                err.textContent = failReason || '格式错误，请使用 HH:mm';
+                err.classList.remove('hidden');
+            }
+        }
       } else {
         input.classList.remove('border-red-500');
         if (err) err.classList.add('hidden');
@@ -1238,14 +1263,38 @@ export const adminPage = `
       timesEl.addEventListener('blur', () => {
          // Auto-fix on blur
          let val = timesEl.value;
-         if (val) {
+         if (val && val.trim()) {
              const fixed = normalizeTimeStr(val);
-             if (fixed !== val) timesEl.value = fixed;
+             // Only update if different and fixed value is not empty
+             // If fixed value is empty (e.g. user typed garbage), we might not want to clear it immediately, 
+             // but let validation show error.
+             if (fixed && fixed !== val) {
+                 timesEl.value = fixed;
+             }
          }
-         validateDailyTimes();
+         validateDailyTimes(true);
       });
       timesEl.addEventListener('input', () => {
-        validateDailyTimes();
+        // On input, only clear error if it becomes valid or empty. 
+        // Do NOT show error while typing.
+        const input = document.getElementById('dailyReminderTimes');
+        const err = document.getElementById('dailyReminderError');
+        
+        // Simple check: if empty, clear error
+        if (!input.value.trim()) {
+             input.classList.remove('border-red-500');
+             if (err) err.classList.add('hidden');
+             return;
+        }
+        
+        // Try to validate silently. If valid, clear error. If invalid, do nothing (wait for blur/submit).
+        // Exception: if user is typing valid chars, we don't want to flash red.
+        // We pass showError=false.
+        const isValid = validateDailyTimes(false);
+        if (isValid) {
+             input.classList.remove('border-red-500');
+             if (err) err.classList.add('hidden');
+        }
       });
     }
     
