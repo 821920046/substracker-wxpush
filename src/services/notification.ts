@@ -97,6 +97,68 @@ export function formatNotificationContent(subscriptions: Subscription[], config:
 }
 
 /**
+ * 格式化 WeNotify Edge 通知内容 (HTML)
+ */
+export function formatWeNotifyContent(subscriptions: Subscription[], config: Config): string {
+  const showLunar = config.showLunarGlobal === true;
+  const timezone = config.timezone || 'UTC';
+  let content = '';
+
+  for (const sub of subscriptions) {
+    const typeText = sub.customType || '其他';
+    const periodText = (sub.periodValue && sub.periodUnit) ? `(周期: ${sub.periodValue} ${ { day: '天', month: '月', year: '年' }[sub.periodUnit] || sub.periodUnit})` : '';
+
+    const expiryDateObj = new Date(sub.expiryDate);
+    const formattedExpiryDate = formatTimeInTimezone(expiryDateObj, timezone, 'date');
+    
+    let lunarExpiryText = '';
+    if (showLunar) {
+      const lunarExpiry = lunarCalendar.solar2lunar(expiryDateObj.getFullYear(), expiryDateObj.getMonth() + 1, expiryDateObj.getDate());
+      lunarExpiryText = lunarExpiry ? `\n<font color="#888888">农历日期:</font> ${lunarExpiry.fullStr}` : '';
+    }
+
+    let statusText = '';
+    let statusEmoji = '';
+    let statusColor = '#000000';
+    
+    if (sub.daysRemaining === 0) {
+      statusEmoji = '⚠️';
+      statusText = '今天到期！';
+      statusColor = '#ff9800';
+    } else if (sub.daysRemaining !== undefined && sub.daysRemaining < 0) {
+      statusEmoji = '🚨';
+      statusText = `已过期 ${Math.abs(sub.daysRemaining)} 天`;
+      statusColor = '#f44336';
+    } else {
+      statusEmoji = '📅';
+      statusText = `将在 ${sub.daysRemaining} 天后到期`;
+      statusColor = '#4caf50';
+    }
+
+    const calendarType = sub.useLunar ? '农历' : '公历';
+    const autoRenewText = sub.autoRenew ? '是' : '否';
+    
+    const subscriptionContent = `${statusEmoji} <b>${sub.name}</b>
+<font color="#888888">类型:</font> ${typeText} ${periodText}
+<font color="#888888">日历类型:</font> ${calendarType}
+<font color="#888888">到期日期:</font> ${formattedExpiryDate}${lunarExpiryText}
+<font color="#888888">自动续期:</font> ${autoRenewText}
+<font color="#888888">到期状态:</font> <font color="${statusColor}">${statusText}</font>`;
+
+    let finalContent = sub.notes ? 
+      subscriptionContent + `\n<font color="#888888">备注:</font> ${sub.notes}` : 
+      subscriptionContent;
+
+    content += finalContent + '\n\n';
+  }
+
+  const currentTime = formatTimeInTimezone(new Date(), timezone, 'datetime');
+  content += `<font color="#888888">发送时间:</font> ${currentTime}\n<font color="#888888">当前时区:</font> ${formatTimezoneDisplay(timezone)}`;
+
+  return content;
+}
+
+/**
  * 发送通知到所有启用的渠道
  */
 export async function sendNotificationToAllChannels(title: string, commonContent: string, config: Config, env: Env | null = null, logPrefix = '[定时任务]'): Promise<void> {
