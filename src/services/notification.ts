@@ -158,6 +158,27 @@ export function formatWeNotifyContent(subscriptions: Subscription[], config: Con
   return content;
 }
 
+function colorizeWeNotifyContent(content: string): string {
+  const labelColor = '#888888';
+  const wrapLabel = (label: string) => `<font color="${labelColor}">${label}:</font> `;
+  let result = content;
+  result = result.replace(/^类型:\s*/gm, wrapLabel('类型'));
+  result = result.replace(/^日历类型:\s*/gm, wrapLabel('日历类型'));
+  result = result.replace(/^到期日期:\s*/gm, wrapLabel('到期日期'));
+  result = result.replace(/^自动续期:\s*/gm, wrapLabel('自动续期'));
+  result = result.replace(/^备注:\s*/gm, wrapLabel('备注'));
+  result = result.replace(/^发送时间:\s*/gm, wrapLabel('发送时间'));
+  result = result.replace(/^当前时区:\s*/gm, wrapLabel('当前时区'));
+  result = result.replace(/^到期状态:\s*(.+)$/gm, (_m, status) => {
+    let statusColor = '#4caf50';
+    if (/今天到期/.test(status)) statusColor = '#ff9800';
+    else if (/已过期/.test(status)) statusColor = '#f44336';
+    return `<font color="${labelColor}">到期状态:</font> <font color="${statusColor}">${status}</font>`;
+  });
+  result = result.replace(/(\**|\*|##|#|`)/g, '');
+  return result;
+}
+
 /**
  * 发送通知到所有启用的渠道
  */
@@ -176,7 +197,7 @@ export async function sendNotificationToAllChannels(title: string, commonContent
         console.log(`${logPrefix} 发送NotifyX通知 ${success ? '成功' : '失败'}`);
     }
     if (config.enabledNotifiers.includes('wenotify')) {
-        const wenotifyContent = commonContent.replace(/(\**|\*|##|#|`)/g, '');
+        const wenotifyContent = colorizeWeNotifyContent(commonContent);
         const success = await sendWeNotifyEdgeNotification(title, wenotifyContent, config);
         results.push({ channel: 'wenotify', success });
         console.log(`${logPrefix} 发送WeNotify Edge通知 ${success ? '成功' : '失败'}`);
