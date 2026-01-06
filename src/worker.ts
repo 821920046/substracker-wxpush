@@ -170,8 +170,7 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       const ok = inputUser === expectedUser && inputPass === expectedPass;
       if (ok) {
         const token = await generateJWT(body.username, config.jwtSecret!);
-        const isLocal = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
-        const secureFlag = isLocal ? '' : '; Secure';
+        const secureFlag = url.protocol === 'https:' ? '; Secure' : '';
         return new Response(JSON.stringify({ success: true }), {
           headers: {
             'Content-Type': 'application/json',
@@ -190,8 +189,7 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
 
   // Public API: Logout
   if (path === '/logout' && (method === 'GET' || method === 'POST')) {
-    const isLocal = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
-    const secureFlag = isLocal ? '' : '; Secure';
+    const secureFlag = url.protocol === 'https:' ? '; Secure' : '';
     return new Response('', {
       status: 302,
       headers: {
