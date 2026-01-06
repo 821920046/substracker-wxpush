@@ -197,7 +197,7 @@ export async function sendNotificationToAllChannels(title: string, commonContent
         console.log(`${logPrefix} 发送NotifyX通知 ${success ? '成功' : '失败'}`);
     }
     if (config.enabledNotifiers.includes('wenotify')) {
-        const wenotifyContent = colorizeWeNotifyContent(commonContent);
+        const wenotifyContent = commonContent.replace(/(\**|\*|##|#|`)/g, '');
         const success = await sendWeNotifyEdgeNotification(title, wenotifyContent, config);
         results.push({ channel: 'wenotify', success });
         console.log(`${logPrefix} 发送WeNotify Edge通知 ${success ? '成功' : '失败'}`);
