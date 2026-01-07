@@ -33,21 +33,22 @@ export function renderHackerSkin(title, message, date) {
         </div>`;
       }
 
-      const row = (label, value, color) => {
+      const row = (label, value, color, labelColor) => {
         if (!value) return '';
+        const lColor = labelColor || '#888888';
         const valHtml = color ? `<span style="color:${color}">${esc(value)}</span>` : esc(value);
         return `<div style="margin-bottom:8px; line-height:1.6;">
-          <span style="color:#888888; margin-right:4px;">${esc(label)}:</span> 
+          <span style="color:${lColor}; margin-right:4px;">${esc(label)}:</span> 
           ${valHtml}
         </div>`;
       };
 
       html += row('类型', item.type);
       html += row('日历类型', item.calendarType);
-      html += row('到期日期', item.expiryDate);
+      html += row('到期日期', item.expiryDate, undefined, '#ff4d4f');
       html += row('农历日期', item.lunarDate);
       html += row('自动续期', item.autoRenew);
-      html += row('到期状态', item.statusText, item.statusColor);
+      html += row('到期状态', item.statusText, item.statusColor, '#ff4d4f');
       html += row('备注', item.notes);
 
       return `<div class="info-content" style="margin-bottom: 20px; border-bottom: 1px solid rgba(0,188,212,0.1); padding-bottom: 20px;">${html}</div>`;
