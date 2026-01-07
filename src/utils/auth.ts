@@ -25,11 +25,13 @@ export const CryptoJS = {
 };
 
 export function generateRandomSecret(): string {
-  // 生成一个64字符的随机密钥
+  // Use Web Crypto API for secure random generation
+  const array = new Uint8Array(64);
+  crypto.getRandomValues(array);
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
   let result = '';
-  for (let i = 0; i < 64; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  for (let i = 0; i < array.length; i++) {
+    result += chars.charAt(array[i] % chars.length);
   }
   return result;
 }

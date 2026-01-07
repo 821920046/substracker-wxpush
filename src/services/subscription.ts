@@ -3,6 +3,50 @@ import { lunarBiz, lunarCalendar } from '../utils/lunar';
 import { getConfig } from '../utils/config';
 import { getCurrentTimeInTimezone } from '../utils/date';
 
+/**
+ * Calculate the next expiry date based on period
+ */
+function calculateNextExpiryDate(
+  currentExpiry: Date,
+  periodValue: number,
+  periodUnit: 'day' | 'month' | 'year',
+  useLunar: boolean,
+  targetDate: Date
+): Date {
+  let nextExpiry = new Date(currentExpiry);
+  
+  // If date is already in future (>= target), no need to calculate
+  if (nextExpiry >= targetDate) return nextExpiry;
+
+  if (useLunar) {
+    let lunar = lunarCalendar.solar2lunar(
+      nextExpiry.getFullYear(),
+      nextExpiry.getMonth() + 1,
+      nextExpiry.getDate()
+    );
+    // If lunar conversion fails, return original to avoid infinite loops or errors
+    if (!lunar) return nextExpiry;
+
+    while (nextExpiry < targetDate) {
+      lunar = lunarBiz.addLunarPeriod(lunar, periodValue, periodUnit);
+      const solar = lunarBiz.lunar2solar(lunar);
+      if (!solar) break;
+      nextExpiry = new Date(solar.year, solar.month - 1, solar.day);
+    }
+  } else {
+    while (nextExpiry < targetDate) {
+      if (periodUnit === 'day') {
+        nextExpiry.setDate(nextExpiry.getDate() + periodValue);
+      } else if (periodUnit === 'month') {
+        nextExpiry.setMonth(nextExpiry.getMonth() + periodValue);
+      } else if (periodUnit === 'year') {
+        nextExpiry.setFullYear(nextExpiry.getFullYear() + periodValue);
+      }
+    }
+  }
+  return nextExpiry;
+}
+
 export class SubscriptionService {
   constructor(private env: Env) {}
 
@@ -11,12 +55,11 @@ export class SubscriptionService {
     const indexStr = await this.env.SUBSCRIPTIONS_KV.get('subscriptions:index');
     if (indexStr) {
       const ids: string[] = JSON.parse(indexStr);
-      const items: Subscription[] = [];
-      for (const id of ids) {
-        const s = await this.env.SUBSCRIPTIONS_KV.get('subscription:' + id);
-        if (s) items.push(JSON.parse(s));
-      }
-      return items;
+      const promises = ids.map(id => this.env.SUBSCRIPTIONS_KV.get('subscription:' + id));
+      const results = await Promise.all(promises);
+      return results
+        .filter(s => s !== null)
+        .map(s => JSON.parse(s!));
     }
     const legacy = await this.env.SUBSCRIPTIONS_KV.get('subscriptions');
     if (legacy) {
@@ -53,7 +96,7 @@ export class SubscriptionService {
       let useLunar = !!subscription.useLunar;
 
       if (useLunar) {
-        let lunar = lunarCalendar.solar2lunar(
+        const lunar = lunarCalendar.solar2lunar(
           expiryDate.getFullYear(),
           expiryDate.getMonth() + 1,
           expiryDate.getDate()
@@ -61,29 +104,17 @@ export class SubscriptionService {
         if (!lunar) {
            return { success: false, message: '农历日期超出支持范围（1900-2100年）' };
         }
-        
-        if (subscription.periodValue && subscription.periodUnit) {
-           while (expiryDate <= currentTime) {
-              lunar = lunarBiz.addLunarPeriod(lunar, subscription.periodValue, subscription.periodUnit);
-              const solar = lunarBiz.lunar2solar(lunar);
-              if (!solar) break;
-              expiryDate = new Date(solar.year, solar.month - 1, solar.day);
-           }
-           subscription.expiryDate = expiryDate.toISOString();
-        }
-      } else {
-         if (expiryDate < currentTime && subscription.periodValue && subscription.periodUnit) {
-            while (expiryDate < currentTime) {
-               if (subscription.periodUnit === 'day') {
-                  expiryDate.setDate(expiryDate.getDate() + subscription.periodValue);
-               } else if (subscription.periodUnit === 'month') {
-                  expiryDate.setMonth(expiryDate.getMonth() + subscription.periodValue);
-               } else if (subscription.periodUnit === 'year') {
-                  expiryDate.setFullYear(expiryDate.getFullYear() + subscription.periodValue);
-               }
-            }
-            subscription.expiryDate = expiryDate.toISOString();
-         }
+      }
+
+      if (subscription.periodValue && subscription.periodUnit) {
+         expiryDate = calculateNextExpiryDate(
+            expiryDate,
+            subscription.periodValue,
+            subscription.periodUnit,
+            useLunar,
+            currentTime
+         );
+         subscription.expiryDate = expiryDate.toISOString();
       }
 
       const newSubscription: Subscription = {
@@ -135,35 +166,23 @@ export class SubscriptionService {
 
       let useLunar = !!subscription.useLunar;
       if (useLunar) {
-         let lunar = lunarCalendar.solar2lunar(
+         const lunar = lunarCalendar.solar2lunar(
             expiryDate.getFullYear(),
             expiryDate.getMonth() + 1,
             expiryDate.getDate()
          );
          if (!lunar) return { success: false, message: '农历日期超出支持范围' };
-         
-         if (expiryDate < currentTime && subscription.periodValue && subscription.periodUnit) {
-            do {
-               lunar = lunarBiz.addLunarPeriod(lunar, subscription.periodValue, subscription.periodUnit);
-               const solar = lunarBiz.lunar2solar(lunar);
-               if (!solar) break; 
-               expiryDate = new Date(solar.year, solar.month - 1, solar.day);
-            } while (expiryDate < currentTime);
-            subscription.expiryDate = expiryDate.toISOString();
-         }
-      } else {
-         if (expiryDate < currentTime && subscription.periodValue && subscription.periodUnit) {
-            while (expiryDate < currentTime) {
-               if (subscription.periodUnit === 'day') {
-                  expiryDate.setDate(expiryDate.getDate() + subscription.periodValue);
-               } else if (subscription.periodUnit === 'month') {
-                  expiryDate.setMonth(expiryDate.getMonth() + subscription.periodValue);
-               } else if (subscription.periodUnit === 'year') {
-                  expiryDate.setFullYear(expiryDate.getFullYear() + subscription.periodValue);
-               }
-            }
-            subscription.expiryDate = expiryDate.toISOString();
-         }
+      }
+
+      if (expiryDate < currentTime && subscription.periodValue && subscription.periodUnit) {
+          expiryDate = calculateNextExpiryDate(
+              expiryDate,
+              subscription.periodValue,
+              subscription.periodUnit,
+              useLunar,
+              currentTime
+          );
+          subscription.expiryDate = expiryDate.toISOString();
       }
 
       const updated: Subscription = {
@@ -256,45 +275,14 @@ export class SubscriptionService {
           console.log(`[AutoRenew] Renewing subscription: ${sub.name}`);
           
           // Calculate next expiry date based on period
-          if (sub.useLunar) {
-             const currentLunar = lunarCalendar.solar2lunar(
-                expiryDate.getFullYear(),
-                expiryDate.getMonth() + 1,
-                expiryDate.getDate()
-             );
-             if (currentLunar) {
-                 // Add period to lunar date
-                 // We loop until the new expiry date is in the future relative to NOW
-                 // However, for strict adherence to period, we just add one period.
-                 // But if it's long expired, we might need to add multiple.
-                 // Let's assume we add one period at a time or enough to be future.
-                 // Standard logic: Add period until > today.
-                 
-                 let nextLunar = currentLunar;
-                 let nextSolarDate = expiryDate;
-                 
-                 do {
-                     nextLunar = lunarBiz.addLunarPeriod(nextLunar, sub.periodValue || 1, sub.periodUnit || 'month');
-                     const solar = lunarBiz.lunar2solar(nextLunar);
-                     if (!solar) break;
-                     nextSolarDate = new Date(solar.year, solar.month - 1, solar.day);
-                 } while (nextSolarDate < today);
-                 
-                 sub.expiryDate = nextSolarDate.toISOString();
-             }
-          } else {
-             // Solar auto-renew
-             do {
-                if (sub.periodUnit === 'day') {
-                   expiryDate.setDate(expiryDate.getDate() + (sub.periodValue || 1));
-                } else if (sub.periodUnit === 'month') {
-                   expiryDate.setMonth(expiryDate.getMonth() + (sub.periodValue || 1));
-                } else if (sub.periodUnit === 'year') {
-                   expiryDate.setFullYear(expiryDate.getFullYear() + (sub.periodValue || 1));
-                }
-             } while (expiryDate < today);
-             sub.expiryDate = expiryDate.toISOString();
-          }
+          const nextExpiry = calculateNextExpiryDate(
+              expiryDate,
+              sub.periodValue || 1,
+              sub.periodUnit || 'month',
+              !!sub.useLunar,
+              today
+          );
+          sub.expiryDate = nextExpiry.toISOString();
           
           sub.updatedAt = new Date().toISOString();
           await this.env.SUBSCRIPTIONS_KV.put('subscription:' + sub.id, JSON.stringify(sub));

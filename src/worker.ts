@@ -78,7 +78,7 @@ export default {
 
       const commonContent = formatNotificationContent(subscriptions, config);
       const title = '订阅到期提醒';
-      await sendNotificationToAllChannels(title, commonContent, config, env, '[定时任务]', subscriptions);
+      ctx.waitUntil(sendNotificationToAllChannels(title, commonContent, config, env, '[定时任务]', subscriptions));
     }
   }
 };
