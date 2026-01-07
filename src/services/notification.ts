@@ -180,9 +180,61 @@ function colorizeWeNotifyContent(content: string): string {
 }
 
 /**
+ * 格式化 WeNotify Edge 结构化通知内容 (JSON)
+ */
+export function formatWeNotifyStructuredContent(subscriptions: Subscription[], config: Config): string {
+  const showLunar = config.showLunarGlobal === true;
+  const timezone = config.timezone || 'UTC';
+  
+  const items = subscriptions.map(sub => {
+    const typeText = sub.customType || '其他';
+    const periodText = (sub.periodValue && sub.periodUnit) ? `(周期: ${sub.periodValue} ${ { day: '天', month: '月', year: '年' }[sub.periodUnit] || sub.periodUnit})` : '';
+    
+    const expiryDateObj = new Date(sub.expiryDate);
+    const formattedExpiryDate = formatTimeInTimezone(expiryDateObj, timezone, 'date');
+    
+    let lunarExpiryText = '';
+    if (showLunar) {
+      const lunarExpiry = lunarCalendar.solar2lunar(expiryDateObj.getFullYear(), expiryDateObj.getMonth() + 1, expiryDateObj.getDate());
+      lunarExpiryText = lunarExpiry ? lunarExpiry.fullStr : '';
+    }
+
+    let statusText = '';
+    let statusColor = '#4caf50'; // default green
+    
+    if (sub.daysRemaining === 0) {
+      statusText = '今天到期！';
+      statusColor = '#ff9800'; // orange
+    } else if (sub.daysRemaining !== undefined && sub.daysRemaining < 0) {
+      statusText = `已过期 ${Math.abs(sub.daysRemaining)} 天`;
+      statusColor = '#f44336'; // red
+    } else {
+      statusText = `将在 ${sub.daysRemaining} 天后到期`;
+    }
+
+    const calendarType = sub.useLunar ? '农历' : '公历';
+    const autoRenewText = sub.autoRenew ? '是' : '否';
+
+    return {
+        name: sub.name,
+        type: `${typeText} ${periodText}`,
+        calendarType: calendarType,
+        expiryDate: formattedExpiryDate,
+        lunarDate: lunarExpiryText,
+        autoRenew: autoRenewText,
+        statusText: statusText,
+        statusColor: statusColor,
+        notes: sub.notes || ''
+    };
+  });
+
+  return JSON.stringify(items);
+}
+
+/**
  * 发送通知到所有启用的渠道
  */
-export async function sendNotificationToAllChannels(title: string, commonContent: string, config: Config, env: Env | null = null, logPrefix = '[定时任务]'): Promise<void> {
+export async function sendNotificationToAllChannels(title: string, commonContent: string, config: Config, env: Env | null = null, logPrefix = '[定时任务]', subscriptions: Subscription[] | null = null): Promise<void> {
     if (!config.enabledNotifiers || config.enabledNotifiers.length === 0) {
         console.log(`${logPrefix} 未启用任何通知渠道。`);
         return;
@@ -197,7 +249,10 @@ export async function sendNotificationToAllChannels(title: string, commonContent
         console.log(`${logPrefix} 发送NotifyX通知 ${success ? '成功' : '失败'}`);
     }
     if (config.enabledNotifiers.includes('wenotify')) {
-        const wenotifyContent = commonContent.replace(/(\**|\*|##|#|`)/g, '');
+        let wenotifyContent = commonContent.replace(/(\**|\*|##|#|`)/g, '');
+        if (subscriptions && subscriptions.length > 0) {
+            wenotifyContent = formatWeNotifyStructuredContent(subscriptions, config);
+        }
         const success = await sendWeNotifyEdgeNotification(title, wenotifyContent, config);
         results.push({ channel: 'wenotify', success });
         console.log(`${logPrefix} 发送WeNotify Edge通知 ${success ? '成功' : '失败'}`);

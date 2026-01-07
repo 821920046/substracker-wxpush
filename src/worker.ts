@@ -78,7 +78,7 @@ export default {
 
       const commonContent = formatNotificationContent(subscriptions, config);
       const title = '订阅到期提醒';
-      await sendNotificationToAllChannels(title, commonContent, config, env, '[定时任务]');
+      await sendNotificationToAllChannels(title, commonContent, config, env, '[定时任务]', subscriptions);
     }
   }
 };
@@ -449,7 +449,7 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
         sub.daysRemaining = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
         
         const content = formatNotificationContent([sub], config);
-        await sendNotificationToAllChannels('订阅提醒测试', content, config, env, '[手动测试]');
+        await sendNotificationToAllChannels('订阅提醒测试', content, config, env, '[手动测试]', [sub]);
         return new Response(JSON.stringify({ success: true, message: '已发送' }), { headers: { 'Content-Type': 'application/json' } });
       } catch (e: any) {
         return new Response(JSON.stringify({ success: false, message: e.message }), { status: 500 });
