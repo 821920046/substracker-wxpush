@@ -1,6 +1,7 @@
 
-export function renderHackerSkin(title: string, message: string, date: string) {
-  const esc = (s: string = '') => String(s)
+// 注意：此文件内容需要兼容 WeNotify 平台的 JavaScript 环境，请勿使用 TypeScript 类型注解
+export function renderHackerSkin(title, message, date) {
+  const esc = (s = '') => String(s)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -15,9 +16,9 @@ export function renderHackerSkin(title: string, message: string, date: string) {
     const parsed = JSON.parse(message);
     const items = Array.isArray(parsed) ? parsed : [parsed];
 
-    contentHtml = items.map((item: any) => {
-      // Compatibility with raw strings wrapped in JSON or mixed content
-      if (typeof item === 'string') {
+    contentHtml = items.map((item) => {
+      // Compatibility with raw strings or non-object types
+      if (typeof item !== 'object' || item === null) {
         const cleanedRaw = String(item).replace(/^\s*(当前时间|时间)\s*[:：].*$/mg, '').replace(/\n{3,}/g, '\n\n').trim();
         return `<div class="info-content">${esc(cleanedRaw).replace(/\n/g, '<br>')}</div>`;
       }
@@ -32,7 +33,7 @@ export function renderHackerSkin(title: string, message: string, date: string) {
         </div>`;
       }
 
-      const row = (label: string, value: string | undefined, color?: string) => {
+      const row = (label, value, color) => {
         if (!value) return '';
         const valHtml = color ? `<span style="color:${color}">${esc(value)}</span>` : esc(value);
         return `<div style="margin-bottom:8px; line-height:1.6;">
@@ -103,7 +104,7 @@ export function renderHackerSkin(title: string, message: string, date: string) {
 }
 
 export default {
-  async fetch(request: Request) {
+  async fetch(request) {
     const url = new URL(request.url);
     let title = url.searchParams.get('title') || '消息推送';
     let message = url.searchParams.get('message') || '无告警信息';
@@ -111,7 +112,7 @@ export default {
 
     if (request.method === 'POST') {
       try {
-        const body: any = await request.json();
+        const body = await request.json();
         if (body.title) title = body.title;
         // Support both 'content' (from subscription-manager) and 'message'
         if (body.content) message = body.content;
