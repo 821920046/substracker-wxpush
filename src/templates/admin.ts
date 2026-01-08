@@ -208,16 +208,16 @@ export const adminPage = `
         </div>
       </div>
       
-      <div class="overflow-x-auto">
+      <div class="hidden md:block overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
             <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4 sm:w-auto">服务名称</th>
-              <th class="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">类型</th>
-              <th class="hidden sm:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">周期</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">服务名称</th>
+              <th class="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">类型</th>
+              <th class="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">周期</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">到期时间</th>
-              <th class="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">价格</th>
-              <th class="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">月均支出</th>
+              <th class="hidden xl:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">价格</th>
+              <th class="hidden xl:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">月均支出</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
             </tr>
@@ -230,6 +230,13 @@ export const adminPage = `
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- Mobile List View -->
+      <div id="mobileSubscriptionList" class="md:hidden space-y-4">
+        <div class="text-center py-10 text-gray-500">
+          <i class="fas fa-spinner fa-spin mr-2"></i>加载中...
+        </div>
       </div>
     </div>
   </div>
@@ -872,7 +879,9 @@ export const adminPage = `
     
     function renderSubscriptions() {
         const tbody = document.getElementById('subscriptionList');
+        const mobileList = document.getElementById('mobileSubscriptionList');
         tbody.innerHTML = '';
+        mobileList.innerHTML = '';
         
         let list = subscriptions.slice();
         if (searchQuery && searchQuery.length > 0) {
@@ -899,6 +908,7 @@ export const adminPage = `
         
         if (list.length === 0) {
           tbody.innerHTML = '<tr><td colspan="8" class="text-center py-10 text-gray-500">暂无订阅，点击上方按钮添加</td></tr>';
+          mobileList.innerHTML = '<div class="text-center py-10 text-gray-500">暂无订阅，点击上方按钮添加</div>';
           return;
         }
         
@@ -921,7 +931,6 @@ export const adminPage = `
         const unitMap = { day: '天', month: '月', year: '年' };
         
         list.forEach(sub => {
-          const tr = document.createElement('tr');
           const exp = new Date(sub.expiryDate);
           const today = new Date();
           today.setHours(0,0,0,0);
@@ -951,6 +960,8 @@ export const adminPage = `
             monthlyStr = '¥' + m.toFixed(2);
           }
           
+          // Desktop Table Row
+          const tr = document.createElement('tr');
           tr.innerHTML = \`
             <td class="px-4 sm:px-6 py-4 whitespace-nowrap max-w-[80px] sm:max-w-[140px] md:max-w-[200px] overflow-hidden">
                 <div class="text-sm font-medium text-gray-900 truncate" title="\${sub.name}">\${sub.name}</div>
@@ -975,6 +986,43 @@ export const adminPage = `
             </td>
           \`;
           tbody.appendChild(tr);
+
+          // Mobile Card View
+          const card = document.createElement('div');
+          card.className = 'bg-white p-4 rounded-xl shadow-sm border border-gray-100';
+          card.innerHTML = \`
+            <div class="flex justify-between items-start mb-3">
+              <div class="overflow-hidden mr-2">
+                <h3 class="font-bold text-gray-900 text-lg truncate">\${sub.name}</h3>
+                <div class="flex items-center text-xs text-gray-500 mt-1">
+                  <span class="bg-gray-100 px-2 py-0.5 rounded mr-2">\${sub.customType || '其他'}</span>
+                  <span>\${sub.periodValue}\${unitMap[sub.periodUnit]}</span>
+                </div>
+              </div>
+              <div class="flex-shrink-0">\${statusHtml}</div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-y-2 gap-x-4 text-sm text-gray-600 mb-4 bg-gray-50 p-3 rounded-lg">
+               <div class="flex items-center"><i class="fas fa-calendar-alt mr-2 text-gray-400 w-4"></i>\${dateStr}</div>
+               <div class="flex items-center"><i class="fas fa-yen-sign mr-2 text-gray-400 w-4"></i>\${priceStr === '-' ? '--' : priceStr.replace('¥','')}</div>
+               <div class="flex items-center col-span-2 text-xs text-gray-400">
+                  <i class="fas fa-info-circle mr-2 w-4"></i>\${sub.useLunar ? '农历' : '公历'}
+               </div>
+            </div>
+            
+            <div class="flex justify-between items-center pt-2 border-t border-gray-100">
+              <div class="text-xs text-gray-400 italic truncate max-w-[120px]">\${sub.notes || '无备注'}</div>
+              <div class="flex space-x-4">
+                <button onclick="openModal('\${sub.id}')" class="text-indigo-600 hover:text-indigo-800"><i class="fas fa-edit text-lg"></i></button>
+                <button onclick="toggleStatus('\${sub.id}', \${!sub.isActive})" class="text-blue-600 hover:text-blue-800">
+                  <i class="fas \${sub.isActive ? 'fa-toggle-on' : 'fa-toggle-off'} text-lg"></i>
+                </button>
+                <button onclick="testNotify('\${sub.id}')" class="text-yellow-600 hover:text-yellow-800"><i class="fas fa-bell text-lg"></i></button>
+                <button onclick="deleteSubscription('\${sub.id}')" class="text-red-600 hover:text-red-800"><i class="fas fa-trash text-lg"></i></button>
+              </div>
+            </div>
+          \`;
+          mobileList.appendChild(card);
         });
     }
     
