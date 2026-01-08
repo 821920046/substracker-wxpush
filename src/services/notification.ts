@@ -97,6 +97,79 @@ export function formatNotificationContent(subscriptions: Subscription[], config:
 }
 
 /**
+ * 格式化企业微信 Markdown 内容 (支持颜色)
+ */
+export function formatWeChatMarkdownContent(subscriptions: Subscription[], config: Config): string {
+  const showLunar = config.showLunarGlobal === true;
+  const timezone = config.timezone || 'UTC';
+  let content = '';
+
+  for (const sub of subscriptions) {
+    const typeText = sub.customType || '其他';
+    const periodText = (sub.periodValue && sub.periodUnit) ? `(周期: ${sub.periodValue} ${ { day: '天', month: '月', year: '年' }[sub.periodUnit] || sub.periodUnit})` : '';
+
+    // 格式化到期日期（使用所选时区）
+    const expiryDateObj = new Date(sub.expiryDate);
+    const formattedExpiryDate = formatTimeInTimezone(expiryDateObj, timezone, 'date');
+    
+    // 农历日期
+    let lunarExpiryText = '';
+    if (showLunar) {
+      const lunarExpiry = lunarCalendar.solar2lunar(expiryDateObj.getFullYear(), expiryDateObj.getMonth() + 1, expiryDateObj.getDate());
+      lunarExpiryText = lunarExpiry ? `\n<font color="comment">农历日期:</font> ${lunarExpiry.fullStr}` : '';
+    }
+
+    // 状态和到期时间
+    let statusText = '';
+    let statusEmoji = '';
+    let isWarning = false;
+    
+    // 计算剩余天数
+    if (sub.daysRemaining === 0) {
+      statusEmoji = '⚠️';
+      statusText = '今天到期！';
+      isWarning = true;
+    } else if (sub.daysRemaining !== undefined && sub.daysRemaining < 0) {
+      statusEmoji = '🚨';
+      statusText = `已过期 ${Math.abs(sub.daysRemaining)} 天`;
+      isWarning = true;
+    } else {
+      statusEmoji = '📅';
+      statusText = `将在 ${sub.daysRemaining} 天后到期`;
+    }
+
+    // 对到期状态应用颜色
+    const finalStatusText = isWarning ? `<font color="warning">${statusText}</font>` : statusText;
+
+    // 获取日历类型和自动续期状态
+    const calendarType = sub.useLunar ? '农历' : '公历';
+    const autoRenewText = sub.autoRenew ? '是' : '否';
+    
+    // 构建格式化的通知内容
+    // 标签使用 comment (灰色) 颜色
+    const subscriptionContent = `${statusEmoji} **${sub.name}**
+<font color="comment">类型:</font> ${typeText} ${periodText}
+<font color="comment">日历类型:</font> ${calendarType}
+<font color="comment">到期日期:</font> ${formattedExpiryDate}${lunarExpiryText}
+<font color="comment">自动续期:</font> ${autoRenewText}
+<font color="comment">到期状态:</font> ${finalStatusText}`;
+
+    // 添加备注
+    let finalContent = sub.notes ? 
+      subscriptionContent + `\n<font color="comment">备注:</font> ${sub.notes}` : 
+      subscriptionContent;
+
+    content += finalContent + '\n\n';
+  }
+
+  // 添加发送时间和时区信息
+  const currentTime = formatTimeInTimezone(new Date(), timezone, 'datetime');
+  content += `<font color="comment">发送时间:</font> ${currentTime}\n<font color="comment">当前时区:</font> ${formatTimezoneDisplay(timezone)}`;
+
+  return content;
+}
+
+/**
  * 格式化 WeNotify Edge 结构化通知内容 (JSON)
  */
 export function formatWeNotifyStructuredContent(subscriptions: Subscription[], config: Config): string {
@@ -193,7 +266,16 @@ export async function sendNotificationToAllChannels(title: string, commonContent
         console.log(`${logPrefix} 发送企业微信应用通知 ${success ? '成功' : '失败'}`);
     }
     if (config.enabledNotifiers.includes('wechatbot')) {
-        const wechatbotContent = commonContent.replace(/(\**|\*|##|#|`)/g, '');
+        let wechatbotContent;
+        // 如果配置为 Markdown 且有订阅数据，使用专用格式化函数（支持颜色）
+        if (config.wechatBot?.msgType === 'markdown' && subscriptions && subscriptions.length > 0) {
+            wechatbotContent = formatWeChatMarkdownContent(subscriptions, config);
+        } else {
+            // 否则（文本模式或无订阅数据），剥离 Markdown 符号以防显示乱码
+            // 注意：如果是 Markdown 模式但无订阅数据（如测试消息），这里也会剥离符号，
+            // 如果希望测试消息也支持 Markdown，可以去掉 replace，但通常测试消息是纯文本。
+            wechatbotContent = commonContent.replace(/(\**|\*|##|#|`)/g, '');
+        }
         const success = await sendWechatBotNotification(title, wechatbotContent, config);
         results.push({ channel: 'wechatbot', success });
         console.log(`${logPrefix} 发送企业微信机器人通知 ${success ? '成功' : '失败'}`);
