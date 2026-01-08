@@ -219,7 +219,7 @@ export const adminPage = `
               <th class="hidden xl:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">价格</th>
               <th class="hidden xl:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">月均支出</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200" id="subscriptionList">
@@ -976,13 +976,15 @@ export const adminPage = `
             <td class="hidden lg:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${priceStr}</td>
             <td class="hidden lg:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${monthlyStr}</td>
             <td class="px-6 py-4 whitespace-nowrap">\${statusHtml}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-              <button onclick="openModal('\${sub.id}')" class="text-indigo-600 hover:text-indigo-900 mr-3"><i class="fas fa-edit"></i></button>
-              <button onclick="toggleStatus('\${sub.id}', \${!sub.isActive})" class="text-blue-600 hover:text-blue-900 mr-3" title="\${sub.isActive ? '停用' : '启用'}">
-                <i class="fas \${sub.isActive ? 'fa-toggle-on' : 'fa-toggle-off'}"></i>
-              </button>
-              <button onclick="deleteSubscription('\${sub.id}')" class="text-red-600 hover:text-red-900"><i class="fas fa-trash"></i></button>
-              <button onclick="testNotify('\${sub.id}')" class="text-yellow-600 hover:text-yellow-900 ml-3" title="发送测试通知"><i class="fas fa-bell"></i></button>
+            <td class="px-4 py-4 whitespace-nowrap text-sm font-medium">
+              <div class="flex items-center space-x-3">
+                <button onclick="openModal('\${sub.id}')" class="text-indigo-600 hover:text-indigo-900" title="编辑"><i class="fas fa-edit"></i></button>
+                <button onclick="toggleStatus('\${sub.id}', \${!sub.isActive})" class="text-blue-600 hover:text-blue-900" title="\${sub.isActive ? '停用' : '启用'}">
+                  <i class="fas \${sub.isActive ? 'fa-toggle-on' : 'fa-toggle-off'}"></i>
+                </button>
+                <button onclick="testNotify('\${sub.id}')" class="text-yellow-600 hover:text-yellow-900" title="发送测试通知"><i class="fas fa-bell"></i></button>
+                <button onclick="deleteSubscription('\${sub.id}')" class="text-red-600 hover:text-red-900" title="删除"><i class="fas fa-trash"></i></button>
+              </div>
             </td>
           \`;
           tbody.appendChild(tr);
