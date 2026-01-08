@@ -139,18 +139,21 @@ export function formatWeChatMarkdownContent(subscriptions: Subscription[], confi
     }
 
     // 对到期状态应用颜色
-    const finalStatusText = isWarning ? `<font color="warning">${statusText}</font>` : statusText;
+    const finalStatusText = isWarning ? `<font color="warning">${statusText}</font>` : `<font color="info">${statusText}</font>`;
+    
+    // 标题颜色：警告状态用橙色，正常状态用绿色
+    const titleColor = isWarning ? 'warning' : 'info';
 
     // 获取日历类型和自动续期状态
     const calendarType = sub.useLunar ? '农历' : '公历';
     const autoRenewText = sub.autoRenew ? '是' : '否';
     
     // 构建格式化的通知内容
-    // 标签使用 comment (灰色) 颜色
-    const subscriptionContent = `${statusEmoji} **${sub.name}**
+    // 标签使用 comment (灰色) 颜色，标题和重要信息使用颜色高亮
+    const subscriptionContent = `${statusEmoji} <font color="${titleColor}">**${sub.name}**</font>
 <font color="comment">类型:</font> ${typeText} ${periodText}
 <font color="comment">日历类型:</font> ${calendarType}
-<font color="comment">到期日期:</font> ${formattedExpiryDate}${lunarExpiryText}
+<font color="comment">到期日期:</font> **${formattedExpiryDate}**${lunarExpiryText}
 <font color="comment">自动续期:</font> ${autoRenewText}
 <font color="comment">到期状态:</font> ${finalStatusText}`;
 
