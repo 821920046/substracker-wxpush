@@ -21,27 +21,61 @@ import { generateJWT, verifyJWT, generateRandomSecret } from './utils/auth';
 import { getCurrentTimeInTimezone, formatTimeInTimezone } from './utils/date';
 import { getCookieValue } from './utils/http';
 
+const SECURITY_HEADERS = {
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'SAMEORIGIN',
+  'X-XSS-Protection': '1; mode=block',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()'
+};
+
+function addSecurityHeaders(response: Response): Response {
+  const newHeaders = new Headers(response.headers);
+  Object.entries(SECURITY_HEADERS).forEach(([key, value]) => {
+    newHeaders.set(key, value);
+  });
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: newHeaders
+  });
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
+    // security.txt
+    if (url.pathname === '/.well-known/security.txt') {
+      const content = `Contact: mailto:security@de5.net
+Expires: 2027-01-01T00:00:00.000Z
+Preferred-Languages: zh-cn, en
+Encryption: https://${url.hostname}/pgp-key.txt
+Canonical: https://${url.hostname}/.well-known/security.txt`;
+      
+      return addSecurityHeaders(new Response(content, {
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      }));
+    }
+
     // Debug page
     if (url.pathname === '/debug') {
-      return handleDebugRequest(request, env);
+      return addSecurityHeaders(await handleDebugRequest(request, env));
     }
 
     // API Routes
     if (url.pathname.startsWith('/api')) {
-      return handleApiRequest(request, env);
+      return addSecurityHeaders(await handleApiRequest(request, env));
     }
 
     // Admin Routes
     if (url.pathname.startsWith('/admin')) {
-      return handleAdminRequest(request, env);
+      return addSecurityHeaders(await handleAdminRequest(request, env));
     }
 
     // Default: Login or Redirect to Admin
-    return handleMainRequest(request, env);
+    return addSecurityHeaders(await handleMainRequest(request, env));
   },
 
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
